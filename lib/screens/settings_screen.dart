@@ -19,6 +19,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late int _refreshInterval;
   late DomainInfo _selectedDomain;
   late bool _tcpAutoSendEnabled;
+  late HistoricalPeriod _historicalPeriod;
   bool _obscureApiKey = true;
 
   @override
@@ -35,6 +36,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     _refreshInterval = settings.refreshIntervalMinutes;
     _tcpAutoSendEnabled = settings.tcpAutoSendEnabled;
+    _historicalPeriod = settings.historicalPeriod;
     _selectedDomain = availableDomains.firstWhere(
       (d) => d.code == settings.domain,
       orElse: () => availableDomains.first,
@@ -63,6 +65,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         tcpPort: int.tryParse(_tcpPortController.text) ?? 8080,
         tcpSendIntervalSeconds: tcpInterval.clamp(30, 600),
         tcpAutoSendEnabled: _tcpAutoSendEnabled,
+        historicalPeriod: _historicalPeriod,
       );
 
       context.read<AppProvider>().updateSettings(newSettings);
@@ -241,6 +244,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onChanged: (value) {
                         if (value != null) {
                           setState(() => _refreshInterval = value);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Historical Period Section
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.history,
+                          color: Theme.of(context).primaryColor,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Periodo Storico',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Periodo per calcolo Min/Max/Media di riferimento',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<HistoricalPeriod>(
+                      initialValue: _historicalPeriod,
+                      decoration: const InputDecoration(
+                        labelText: 'Periodo di riferimento',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: HistoricalPeriod.values.map((period) {
+                        return DropdownMenuItem(
+                          value: period,
+                          child: Text(period.label),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _historicalPeriod = value);
                         }
                       },
                     ),

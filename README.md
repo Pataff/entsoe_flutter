@@ -10,28 +10,35 @@ The application retrieves electricity prices from the ENTSO-E Transparency Platf
 
 ### Price Monitoring
 - Automatic retrieval of Day-Ahead prices from ENTSO-E API
-- **30-day historical reference**: Card showing Min/Average/Max and data maturity percentage
+- **Configurable historical reference**: 1 week, 2 weeks, 1 month, 6 months, or 1 year
+- Historical reference card showing Min/Average/Max and data maturity percentage
 - Price display for **yesterday**, **today**, and **tomorrow** (when available)
-- Multi-day chart with price trends and **monthly average line** (selectable)
+- Multi-day chart with price trends and **historical average line** (selectable)
 - Detailed tables with hourly prices and power bands
 
+### Smart Caching System
+- **Local cache** for historical price data - fast app startup after first load
+- **Incremental updates**: Only fetches new days, removes old ones (FIFO)
+- Cache persists between app sessions
+- Automatic cache invalidation when domain or period changes
+
 ### Optimization Algorithm
-The application implements a classification algorithm based on **historical reference (30 days)**:
+The application implements a **Simple Normalized Deviation from Minimum** algorithm:
 
 1. **Historical Data Acquisition**
-   On first launch, the app retrieves 30 days of historical data from the ENTSO-E API to calculate:
-   - `C_min_historical`: Minimum price over the last 30 days
-   - `C_max_historical`: Maximum price over the last 30 days
-   - `C_avg_historical`: Average price over the last 30 days
+   The app retrieves historical data for the configured period (1 week to 1 year) to calculate:
+   - `C_avg_historical`: Average price over the selected period (used for power band decision)
 
-2. **Deviation Percentage Calculation**
+2. **Daily Deviation Percentage Calculation**
    ```
-   %i = ((Ci - C_min_historical) / (C_max_historical - C_min_historical)) × 100
+   %i = ((Ci - C_min_day) / (C_max_day - C_min_day)) × 100
    ```
-   Where `Ci` is the price at hour i, referenced to the monthly historical range.
+   Where `Ci` is the price at hour i, `C_min_day` and `C_max_day` are the **daily** min/max values.
+
+   This shows how expensive an hour is **within the day** (0% = cheapest, 100% = most expensive).
 
 3. **Power Band Classification**
-   Classification considers both the percentage and the historical average:
+   Classification combines **daily percentage** with **historical average**:
 
    | Condition | Band | Power |
    |-----------|------|-------|
@@ -40,7 +47,7 @@ The application implements a classification algorithm based on **historical refe
    | `%i < 33%` AND `Ci <= C_avg_historical` | 3 (Low cost) | 100% |
    | `%i >= 33%` AND `Ci <= C_avg_historical` | 2 (Medium cost) | 50% |
 
-   **Key rule**: If the current price exceeds the monthly average, maximum power is capped at 50%, regardless of position in the min/max range.
+   **Key rule**: If the current price exceeds the historical average, maximum power is capped at 50%, regardless of the daily percentage.
 
 ### TCP Communication
 - Automatic command sending to dView server (MES interface protocol)

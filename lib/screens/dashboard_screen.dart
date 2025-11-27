@@ -45,15 +45,15 @@ class DashboardScreen extends StatelessWidget {
           }
 
           if (provider.isLoadingHistorical) {
-            return const Center(
+            return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Caricamento dati storici (30 giorni)...'),
-                  SizedBox(height: 8),
-                  Text(
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text('Caricamento dati storici (${provider.settings.historicalPeriod.label})...'),
+                  const SizedBox(height: 8),
+                  const Text(
                     'Necessario per calcolo soglie accurate',
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
@@ -110,6 +110,7 @@ class DashboardScreen extends StatelessWidget {
                       today: provider.todayData,
                       tomorrow: provider.tomorrowData,
                       historicalAvgPrice: provider.historicalData?.avgPrice,
+                      historicalPeriodLabel: provider.settings.historicalPeriod.label,
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -331,7 +332,7 @@ class DashboardScreen extends StatelessWidget {
                 Icon(Icons.history, size: 18, color: Colors.blue[800]),
                 const SizedBox(width: 8),
                 Text(
-                  'Riferimento Storico (${historical.daysWithData} giorni)',
+                  'Riferimento Storico (${provider.settings.historicalPeriod.label})',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,

@@ -64,14 +64,18 @@ class AppProvider extends ChangeNotifier {
     final oldInterval = _settings.refreshIntervalMinutes;
     final oldTcpInterval = _settings.tcpSendIntervalSeconds;
     final oldTcpAutoSend = _settings.tcpAutoSendEnabled;
+    final oldHistoricalPeriod = _settings.historicalPeriod;
 
     _settings = newSettings;
     await _storageService.saveSettings(newSettings);
     notifyListeners();
 
-    // Se l'API key o il dominio sono cambiati, ricarica tutto incluso storico
-    if (newSettings.apiKey != oldApiKey || newSettings.domain != oldDomain) {
+    // Se l'API key, il dominio o il periodo storico sono cambiati, ricarica tutto incluso storico
+    if (newSettings.apiKey != oldApiKey ||
+        newSettings.domain != oldDomain ||
+        newSettings.historicalPeriod != oldHistoricalPeriod) {
       _historicalData = null; // Reset storico
+      await _storageService.clearHistoricalCache(); // Pulisci cache
       await fetchAllData();
     } else if (!hasData) {
       await fetchAllData();
@@ -136,24 +140,44 @@ class AppProvider extends ChangeNotifier {
     await fetchDailyData();
   }
 
-  /// Fetch dati storici (30 giorni) per calcolo soglie
+  /// Fetch dati storici per calcolo soglie (periodo configurabile)
+  /// Usa la cache per velocizzare: carica da storage e aggiorna solo i giorni mancanti
   Future<void> fetchHistoricalData() async {
     if (_settings.apiKey.isEmpty) return;
 
     _isLoadingHistorical = true;
     notifyListeners();
 
-    final service = EntsoeService(securityToken: _settings.apiKey);
-    final now = DateTime.now();
-    final startDate = now.subtract(const Duration(days: 30));
-    final endDate = now.subtract(const Duration(days: 1)); // Fino a ieri
+    final periodDays = _settings.historicalPeriod.days;
+    final domain = _settings.domain;
 
     try {
-      _historicalData = await service.getHistoricalPrices(
-        _settings.domain,
-        startDate,
-        endDate,
-      );
+      // Prova a caricare dalla cache
+      var cache = await _storageService.loadHistoricalCache();
+
+      // Verifica se la cache è valida per il dominio e periodo correnti
+      if (cache != null && cache.isValidFor(domain, periodDays)) {
+        // Cache valida, verifica se è aggiornata
+        if (cache.isUpToDate) {
+          // Cache aggiornata oggi, usa direttamente
+          _historicalData = cache.toHistoricalData();
+          _isLoadingHistorical = false;
+          notifyListeners();
+          return;
+        }
+
+        // Cache non aggiornata, aggiorna incrementalmente
+        cache = await _updateCacheIncrementally(cache, periodDays);
+      } else {
+        // Nessuna cache valida, scarica tutto
+        cache = await _fetchAllHistoricalData(periodDays);
+      }
+
+      // Salva la cache aggiornata
+      if (cache != null) {
+        await _storageService.saveHistoricalCache(cache);
+        _historicalData = cache.toHistoricalData();
+      }
     } catch (e) {
       _historicalData = HistoricalPriceData(
         error: 'Errore caricamento storico: $e',
@@ -162,6 +186,89 @@ class AppProvider extends ChangeNotifier {
 
     _isLoadingHistorical = false;
     notifyListeners();
+  }
+
+  /// Aggiorna la cache incrementalmente: rimuove vecchi giorni, aggiunge nuovi
+  Future<HistoricalPriceCache?> _updateCacheIncrementally(
+    HistoricalPriceCache cache,
+    int periodDays,
+  ) async {
+    final service = EntsoeService(securityToken: _settings.apiKey);
+
+    // Rimuovi giorni troppo vecchi
+    cache = cache.pruneOldDays(periodDays);
+
+    // Trova giorni mancanti
+    final missingDays = cache.getMissingDays(periodDays);
+
+    if (missingDays.isEmpty) {
+      // Nessun giorno mancante, aggiorna solo il timestamp
+      return HistoricalPriceCache(
+        domain: cache.domain,
+        periodDays: cache.periodDays,
+        dailyPrices: cache.dailyPrices,
+        lastUpdate: DateTime.now(),
+      );
+    }
+
+    // Scarica solo i giorni mancanti
+    for (final date in missingDays) {
+      final response = await service.getDayAheadPrices(
+        _settings.domain,
+        EntsoeService.formatDateForApi(date),
+      );
+
+      if (!response.hasError && response.prices.isNotEmpty) {
+        cache = cache.addDayData(date, response.prices);
+      }
+
+      // Piccola pausa per evitare rate limiting
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
+
+    return cache;
+  }
+
+  /// Scarica tutti i dati storici (nessuna cache o cache invalida)
+  Future<HistoricalPriceCache?> _fetchAllHistoricalData(int periodDays) async {
+    final service = EntsoeService(securityToken: _settings.apiKey);
+    final now = DateTime.now();
+    final yesterday = now.subtract(const Duration(days: 1));
+    final startDate = now.subtract(Duration(days: periodDays));
+
+    final dailyPrices = <String, List<double>>{};
+    var currentDate = startDate;
+
+    while (currentDate.isBefore(yesterday) ||
+        currentDate.isAtSameMomentAs(yesterday)) {
+      final response = await service.getDayAheadPrices(
+        _settings.domain,
+        EntsoeService.formatDateForApi(currentDate),
+      );
+
+      if (!response.hasError && response.prices.isNotEmpty) {
+        final dateKey = '${currentDate.year}-'
+            '${currentDate.month.toString().padLeft(2, '0')}-'
+            '${currentDate.day.toString().padLeft(2, '0')}';
+        dailyPrices[dateKey] = response.prices;
+      }
+
+      currentDate = currentDate.add(const Duration(days: 1));
+
+      // Piccola pausa per evitare rate limiting
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+
+    if (dailyPrices.isEmpty) {
+      return null;
+    }
+
+    return HistoricalPriceCache(
+      domain: _settings.domain,
+      periodDays: periodDays,
+      dailyPrices: dailyPrices,
+      lastUpdate: DateTime.now(),
+    );
   }
 
   /// Fetch solo dati giornalieri (ieri, oggi, domani)

@@ -1,3 +1,16 @@
+/// Enum per il periodo storico di riferimento
+enum HistoricalPeriod {
+  oneWeek(7, '1 settimana'),
+  twoWeeks(14, '2 settimane'),
+  oneMonth(30, '1 mese'),
+  sixMonths(180, '6 mesi'),
+  oneYear(365, '1 anno');
+
+  final int days;
+  final String label;
+  const HistoricalPeriod(this.days, this.label);
+}
+
 class AppSettings {
   final String apiKey;
   final int refreshIntervalMinutes;
@@ -7,6 +20,7 @@ class AppSettings {
   final int tcpPort;
   final int tcpSendIntervalSeconds; // Intervallo invio TCP (30-600 secondi)
   final bool tcpAutoSendEnabled; // Abilita invio automatico TCP
+  final HistoricalPeriod historicalPeriod; // Periodo per calcolo min/max storico
 
   AppSettings({
     this.apiKey = '',
@@ -17,6 +31,7 @@ class AppSettings {
     this.tcpPort = 8080,
     this.tcpSendIntervalSeconds = 60, // Default 60 secondi
     this.tcpAutoSendEnabled = true,
+    this.historicalPeriod = HistoricalPeriod.oneMonth, // Default 1 mese
   });
 
   AppSettings copyWith({
@@ -28,6 +43,7 @@ class AppSettings {
     int? tcpPort,
     int? tcpSendIntervalSeconds,
     bool? tcpAutoSendEnabled,
+    HistoricalPeriod? historicalPeriod,
   }) {
     return AppSettings(
       apiKey: apiKey ?? this.apiKey,
@@ -40,6 +56,7 @@ class AppSettings {
       tcpSendIntervalSeconds:
           tcpSendIntervalSeconds ?? this.tcpSendIntervalSeconds,
       tcpAutoSendEnabled: tcpAutoSendEnabled ?? this.tcpAutoSendEnabled,
+      historicalPeriod: historicalPeriod ?? this.historicalPeriod,
     );
   }
 
@@ -52,9 +69,19 @@ class AppSettings {
         'tcpPort': tcpPort,
         'tcpSendIntervalSeconds': tcpSendIntervalSeconds,
         'tcpAutoSendEnabled': tcpAutoSendEnabled,
+        'historicalPeriod': historicalPeriod.name,
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
+    // Parse historical period from string
+    HistoricalPeriod period = HistoricalPeriod.oneMonth;
+    if (json['historicalPeriod'] != null) {
+      period = HistoricalPeriod.values.firstWhere(
+        (e) => e.name == json['historicalPeriod'],
+        orElse: () => HistoricalPeriod.oneMonth,
+      );
+    }
+
     return AppSettings(
       apiKey: json['apiKey'] ?? '',
       refreshIntervalMinutes: json['refreshIntervalMinutes'] ?? 60,
@@ -64,6 +91,7 @@ class AppSettings {
       tcpPort: json['tcpPort'] ?? 8080,
       tcpSendIntervalSeconds: json['tcpSendIntervalSeconds'] ?? 60,
       tcpAutoSendEnabled: json['tcpAutoSendEnabled'] ?? true,
+      historicalPeriod: period,
     );
   }
 }

@@ -83,8 +83,9 @@ class PriceCalculator {
   }
 
   /// Processa i dati di risposta ENTSO-E usando riferimento STORICO
-  /// Se historicalData è disponibile, usa min/max storici per il calcolo %
-  /// Altrimenti usa i dati giornalieri (fallback)
+  /// Calcolo: Scarto Semplice Normalizzato dal Minimo
+  /// - Percentuale: calcolata sui valori MIN/MAX del GIORNO in esame
+  /// - Fascia di potenza: determinata confrontando con la MEDIA STORICA del periodo
   static DayPriceData? processEntsoeResponseWithHistory(
     EntsoeResponse response,
     DateTime date,
@@ -96,19 +97,13 @@ class PriceCalculator {
 
     final prices = response.prices;
 
-    // Statistiche giornaliere (per visualizzazione)
+    // Statistiche giornaliere (per calcolo percentuale e visualizzazione)
     final dayMinPrice = prices.reduce(min);
     final dayMaxPrice = prices.reduce(max);
     final dayAvgPrice = prices.reduce((a, b) => a + b) / prices.length;
 
-    // Usa riferimento storico se disponibile, altrimenti giornaliero
+    // Media storica per determinazione fascia di potenza
     final hasHistorical = historicalData?.hasData == true;
-    final refMinPrice = hasHistorical
-        ? historicalData!.minPrice
-        : dayMinPrice;
-    final refMaxPrice = hasHistorical
-        ? historicalData!.maxPrice
-        : dayMaxPrice;
     final refAvgPrice = hasHistorical
         ? historicalData!.avgPrice
         : dayAvgPrice;
@@ -116,9 +111,10 @@ class PriceCalculator {
         ? historicalData!.stdDeviation
         : 0.0;
 
-    // Calcola le percentuali usando il riferimento (storico o giornaliero)
+    // Calcola le percentuali usando MIN/MAX del GIORNO (non storico)
+    // Formula: %i = ((Ci - Cmin_giorno) / (Cmax_giorno - Cmin_giorno)) × 100
     final percentages = prices
-        .map((p) => calculatePercentage(p, refMinPrice, refMaxPrice))
+        .map((p) => calculatePercentage(p, dayMinPrice, dayMaxPrice))
         .toList();
 
     // Crea la lista di prezzi orari con tutte le informazioni
@@ -127,8 +123,9 @@ class PriceCalculator {
       final dateTime = DateTime(date.year, date.month, date.day, i);
       final percentage = percentages[i].clamp(0.0, 100.0);
 
-      // Usa il nuovo calcolo che considera la media storica
-      // Se prezzo > media mensile -> mai 100% potenza
+      // Determina fascia di potenza:
+      // - Percentuale calcolata sul giorno
+      // - Confronto con media STORICA del periodo selezionato
       final powerBand = hasHistorical
           ? determinePowerBandWithAverage(percentage, prices[i], refAvgPrice)
           : determinePowerBand(percentage);
@@ -144,7 +141,7 @@ class PriceCalculator {
     return DayPriceData(
       date: date,
       hourlyPrices: hourlyPrices,
-      minPrice: dayMinPrice, // Mostra min/max giornaliero
+      minPrice: dayMinPrice,
       maxPrice: dayMaxPrice,
       avgPrice: dayAvgPrice,
       stdDeviation: refStdDev,

@@ -8,6 +8,7 @@ class MultiDayChart extends StatefulWidget {
   final DayPriceData? today;
   final DayPriceData? tomorrow;
   final double? historicalAvgPrice;
+  final String? historicalPeriodLabel;
 
   const MultiDayChart({
     super.key,
@@ -15,6 +16,7 @@ class MultiDayChart extends StatefulWidget {
     this.today,
     this.tomorrow,
     this.historicalAvgPrice,
+    this.historicalPeriodLabel,
   });
 
   @override
@@ -60,6 +62,12 @@ class _MultiDayChartState extends State<MultiDayChart> {
       }
     }
 
+    // Include historical average in min/max calculation if shown
+    if (_showAvgLine && widget.historicalAvgPrice != null) {
+      minPrice = min(minPrice, widget.historicalAvgPrice!);
+      maxPrice = max(maxPrice, widget.historicalAvgPrice!);
+    }
+
     if (minPrice == double.infinity) {
       minPrice = 0;
       maxPrice = 100;
@@ -99,7 +107,7 @@ class _MultiDayChartState extends State<MultiDayChart> {
                   ),
                 if (widget.historicalAvgPrice != null)
                   _buildFilterChip(
-                    'Media 30gg',
+                    'Media ${widget.historicalPeriodLabel ?? ''}',
                     Colors.purple,
                     _showAvgLine,
                     (v) => setState(() => _showAvgLine = v),
