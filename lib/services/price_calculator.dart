@@ -1,5 +1,6 @@
 import 'dart:math';
 import '../models/price_data.dart';
+import 'entsoe_service.dart';
 
 class PriceCalculator {
   /// Calcola la Percentuale di Scostamento dal minimo
@@ -20,10 +21,47 @@ class PriceCalculator {
   }
 
   /// Determina la fascia di potenza basata sulle soglie dinamiche
-  /// Fascia 3: %i < sigma/2 -> 100% potenza (basso costo)
-  /// Fascia 2: sigma/2 <= %i <= sigma -> 50% potenza (medio costo)
-  /// Fascia 1: %i > sigma -> 20% potenza (alto costo)
-  static int determinePowerBand(double percentage, double sigma) {
+  /// Usa soglie fisse basate sulla percentuale storica:
+  /// Fascia 3: %i < 33% -> 100% potenza (basso costo)
+  /// Fascia 2: 33% <= %i <= 66% -> 50% potenza (medio costo)
+  /// Fascia 1: %i > 66% -> 20% potenza (alto costo)
+  static int determinePowerBand(double percentage) {
+    if (percentage < 33.0) {
+      return 3; // Basso costo -> 100% potenza
+    } else if (percentage <= 66.0) {
+      return 2; // Medio costo -> 50% potenza
+    } else {
+      return 1; // Alto costo -> 20% potenza
+    }
+  }
+
+  /// Determina la fascia di potenza considerando anche la media storica
+  /// Regola chiave: se il prezzo supera la media, NON può essere 100% potenza
+  /// Fascia 3: prezzo <= media E %i < 33% -> 100% potenza
+  /// Fascia 2: prezzo <= media E %i >= 33% OPPURE prezzo > media E %i < 66% -> 50% potenza
+  /// Fascia 1: %i >= 66% -> 20% potenza
+  static int determinePowerBandWithAverage(double percentage, double price, double avgPrice) {
+    // Se il prezzo supera il 66% del range -> sempre 20% potenza
+    if (percentage >= 66.0) {
+      return 1; // Alto costo -> 20% potenza
+    }
+
+    // Se il prezzo è sopra la media mensile -> massimo 50% potenza
+    if (price > avgPrice) {
+      return 2; // Sopra media -> 50% potenza (mai 100%)
+    }
+
+    // Prezzo sotto o uguale alla media
+    if (percentage < 33.0) {
+      return 3; // Basso costo E sotto media -> 100% potenza
+    } else {
+      return 2; // Medio costo -> 50% potenza
+    }
+  }
+
+  /// Determina la fascia di potenza con soglie dinamiche basate su sigma
+  /// (usato quando si hanno dati storici sufficienti)
+  static int determinePowerBandDynamic(double percentage, double sigma) {
     final lowerThreshold = sigma / 2;
     final upperThreshold = sigma;
 
@@ -36,34 +74,64 @@ class PriceCalculator {
     }
   }
 
-  /// Processa i dati di risposta ENTSO-E e calcola tutti i valori
+  /// Processa i dati di risposta ENTSO-E usando SOLO dati giornalieri (legacy)
   static DayPriceData? processEntsoeResponse(
     EntsoeResponse response,
     DateTime date,
+  ) {
+    return processEntsoeResponseWithHistory(response, date, null);
+  }
+
+  /// Processa i dati di risposta ENTSO-E usando riferimento STORICO
+  /// Se historicalData è disponibile, usa min/max storici per il calcolo %
+  /// Altrimenti usa i dati giornalieri (fallback)
+  static DayPriceData? processEntsoeResponseWithHistory(
+    EntsoeResponse response,
+    DateTime date,
+    HistoricalPriceData? historicalData,
   ) {
     if (response.hasError || response.prices.isEmpty) {
       return null;
     }
 
     final prices = response.prices;
-    final minPrice = prices.reduce(min);
-    final maxPrice = prices.reduce(max);
-    final avgPrice = prices.reduce((a, b) => a + b) / prices.length;
 
-    // Calcola le percentuali per ogni ora
+    // Statistiche giornaliere (per visualizzazione)
+    final dayMinPrice = prices.reduce(min);
+    final dayMaxPrice = prices.reduce(max);
+    final dayAvgPrice = prices.reduce((a, b) => a + b) / prices.length;
+
+    // Usa riferimento storico se disponibile, altrimenti giornaliero
+    final hasHistorical = historicalData?.hasData == true;
+    final refMinPrice = hasHistorical
+        ? historicalData!.minPrice
+        : dayMinPrice;
+    final refMaxPrice = hasHistorical
+        ? historicalData!.maxPrice
+        : dayMaxPrice;
+    final refAvgPrice = hasHistorical
+        ? historicalData!.avgPrice
+        : dayAvgPrice;
+    final refStdDev = hasHistorical
+        ? historicalData!.stdDeviation
+        : 0.0;
+
+    // Calcola le percentuali usando il riferimento (storico o giornaliero)
     final percentages = prices
-        .map((p) => calculatePercentage(p, minPrice, maxPrice))
+        .map((p) => calculatePercentage(p, refMinPrice, refMaxPrice))
         .toList();
-
-    // Calcola la deviazione standard delle percentuali
-    final stdDev = calculateStdDeviation(percentages);
 
     // Crea la lista di prezzi orari con tutte le informazioni
     List<HourlyPrice> hourlyPrices = [];
     for (int i = 0; i < prices.length && i < 24; i++) {
       final dateTime = DateTime(date.year, date.month, date.day, i);
-      final percentage = percentages[i];
-      final powerBand = determinePowerBand(percentage, stdDev);
+      final percentage = percentages[i].clamp(0.0, 100.0);
+
+      // Usa il nuovo calcolo che considera la media storica
+      // Se prezzo > media mensile -> mai 100% potenza
+      final powerBand = hasHistorical
+          ? determinePowerBandWithAverage(percentage, prices[i], refAvgPrice)
+          : determinePowerBand(percentage);
 
       hourlyPrices.add(HourlyPrice(
         dateTime: dateTime,
@@ -76,10 +144,10 @@ class PriceCalculator {
     return DayPriceData(
       date: date,
       hourlyPrices: hourlyPrices,
-      minPrice: minPrice,
-      maxPrice: maxPrice,
-      avgPrice: avgPrice,
-      stdDeviation: stdDev,
+      minPrice: dayMinPrice, // Mostra min/max giornaliero
+      maxPrice: dayMaxPrice,
+      avgPrice: dayAvgPrice,
+      stdDeviation: refStdDev,
     );
   }
 

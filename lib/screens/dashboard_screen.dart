@@ -44,6 +44,24 @@ class DashboardScreen extends StatelessWidget {
             return _buildSetupPrompt(context);
           }
 
+          if (provider.isLoadingHistorical) {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Caricamento dati storici (30 giorni)...'),
+                  SizedBox(height: 8),
+                  Text(
+                    'Necessario per calcolo soglie accurate',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+            );
+          }
+
           if (provider.isLoading) {
             return const Center(
               child: Column(
@@ -64,6 +82,11 @@ class DashboardScreen extends StatelessWidget {
               children: [
                 // Connection Status
                 const ConnectionStatusWidget(),
+
+                // Historical Reference Card
+                if (provider.historicalData != null &&
+                    provider.historicalData!.hasData)
+                  _buildHistoricalReferenceCard(context, provider),
 
                 // Current Hour Card
                 if (provider.todayData != null) const CurrentHourCard(),
@@ -86,6 +109,7 @@ class DashboardScreen extends StatelessWidget {
                       yesterday: provider.yesterdayData,
                       today: provider.todayData,
                       tomorrow: provider.tomorrowData,
+                      historicalAvgPrice: provider.historicalData?.avgPrice,
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -281,6 +305,110 @@ class DashboardScreen extends StatelessWidget {
                 ],
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoricalReferenceCard(BuildContext context, AppProvider provider) {
+    final historical = provider.historicalData!;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.blue, width: 1.5),
+          color: Colors.blue.withValues(alpha: 0.08),
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.history, size: 18, color: Colors.blue[800]),
+                const SizedBox(width: 8),
+                Text(
+                  'Riferimento Storico (${historical.daysWithData} giorni)',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Colors.blue[800],
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.blue,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${historical.dataMaturityPercent}%',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildHistoricalStat('Min', historical.minPrice, Colors.green[800]!),
+                _buildHistoricalStat('Media', historical.avgPrice, Colors.blue[800]!),
+                _buildHistoricalStat('Max', historical.maxPrice, Colors.red[800]!),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Center(
+              child: Text(
+                'Soglie: <33% = 100% pot. | 33-66% = 50% pot. | >66% = 20% pot.',
+                style: TextStyle(fontSize: 10, color: Colors.grey[700]),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHistoricalStat(String label, double value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value.toStringAsFixed(1),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            'EUR/MWh',
+            style: TextStyle(fontSize: 9, color: Colors.grey[600]),
+          ),
         ],
       ),
     );

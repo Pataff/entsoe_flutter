@@ -10,26 +10,37 @@ L'applicazione recupera i prezzi dell'energia elettrica dalla Transparency Platf
 
 ### Monitoraggio Prezzi
 - Recupero automatico dei prezzi Day-Ahead dall'API ENTSO-E
+- **Riferimento storico 30 giorni**: Card con Min/Media/Max e percentuale di maturità dati
 - Visualizzazione prezzi per **ieri**, **oggi** e **domani** (quando disponibili)
-- Grafico multi-giorno con andamento dei prezzi
-- Tabelle dettagliate con prezzi orari
+- Grafico multi-giorno con andamento dei prezzi e **linea media mensile** (selezionabile)
+- Tabelle dettagliate con prezzi orari e fasce di potenza
 
 ### Algoritmo di Ottimizzazione
-L'applicazione implementa un algoritmo di classificazione basato sulla deviazione standard:
+L'applicazione implementa un algoritmo di classificazione basato su **riferimento storico (30 giorni)**:
 
-1. **Calcolo Percentuale di Scostamento**
-   ```
-   %i = ((Ci - Cmin) / (Cmax - Cmin)) × 100
-   ```
-   Dove `Ci` è il prezzo dell'ora i, `Cmin` il prezzo minimo e `Cmax` il prezzo massimo del giorno.
+1. **Acquisizione Dati Storici**
+   Al primo avvio, l'app recupera 30 giorni di dati storici dall'API ENTSO-E per calcolare:
+   - `Cmin_storico`: Prezzo minimo degli ultimi 30 giorni
+   - `Cmax_storico`: Prezzo massimo degli ultimi 30 giorni
+   - `Cmedia_storico`: Prezzo medio degli ultimi 30 giorni
 
-2. **Calcolo Deviazione Standard (σ)**
-   La deviazione standard delle percentuali definisce le soglie dinamiche.
+2. **Calcolo Percentuale di Scostamento**
+   ```
+   %i = ((Ci - Cmin_storico) / (Cmax_storico - Cmin_storico)) × 100
+   ```
+   Dove `Ci` è il prezzo dell'ora i, riferito al range storico mensile.
 
 3. **Classificazione in Fasce di Potenza**
-   - **Fascia 3 (Basso costo)**: `%i < σ/2` → 100% potenza
-   - **Fascia 2 (Medio costo)**: `σ/2 ≤ %i ≤ σ` → 50% potenza
-   - **Fascia 1 (Alto costo)**: `%i > σ` → 20% potenza
+   La classificazione considera sia la percentuale che la media storica:
+
+   | Condizione | Fascia | Potenza |
+   |------------|--------|---------|
+   | `%i >= 66%` | 1 (Alto costo) | 20% |
+   | `Ci > Cmedia_storico` | 2 (Sopra media) | 50% |
+   | `%i < 33%` E `Ci <= Cmedia_storico` | 3 (Basso costo) | 100% |
+   | `%i >= 33%` E `Ci <= Cmedia_storico` | 2 (Medio costo) | 50% |
+
+   **Regola chiave**: Se il prezzo corrente supera la media mensile, la potenza massima è limitata al 50%, indipendentemente dalla posizione nel range min/max.
 
 ### Comunicazione TCP
 - Invio automatico comandi al server dView (protocollo MES interface)

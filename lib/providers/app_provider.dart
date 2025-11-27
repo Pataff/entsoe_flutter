@@ -17,7 +17,9 @@ class AppProvider extends ChangeNotifier {
   DayPriceData? _yesterdayData;
   DayPriceData? _todayData;
   DayPriceData? _tomorrowData;
+  HistoricalPriceData? _historicalData;
   bool _isLoading = false;
+  bool _isLoadingHistorical = false;
   String? _lastError;
   Timer? _refreshTimer;
   Timer? _tcpSendTimer;
@@ -28,10 +30,13 @@ class AppProvider extends ChangeNotifier {
   DayPriceData? get yesterdayData => _yesterdayData;
   DayPriceData? get todayData => _todayData;
   DayPriceData? get tomorrowData => _tomorrowData;
+  HistoricalPriceData? get historicalData => _historicalData;
   bool get isLoading => _isLoading;
+  bool get isLoadingHistorical => _isLoadingHistorical;
   String? get lastError => _lastError;
   bool get hasData =>
       _yesterdayData != null || _todayData != null || _tomorrowData != null;
+  bool get hasHistoricalData => _historicalData?.hasData ?? false;
 
   HourlyPrice? get currentHourPrice {
     if (_todayData == null) return null;
@@ -55,6 +60,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> updateSettings(AppSettings newSettings) async {
     final oldApiKey = _settings.apiKey;
+    final oldDomain = _settings.domain;
     final oldInterval = _settings.refreshIntervalMinutes;
     final oldTcpInterval = _settings.tcpSendIntervalSeconds;
     final oldTcpAutoSend = _settings.tcpAutoSendEnabled;
@@ -63,8 +69,11 @@ class AppProvider extends ChangeNotifier {
     await _storageService.saveSettings(newSettings);
     notifyListeners();
 
-    // Se l'API key e' cambiata o non abbiamo dati, ricarica
-    if (newSettings.apiKey != oldApiKey || !hasData) {
+    // Se l'API key o il dominio sono cambiati, ricarica tutto incluso storico
+    if (newSettings.apiKey != oldApiKey || newSettings.domain != oldDomain) {
+      _historicalData = null; // Reset storico
+      await fetchAllData();
+    } else if (!hasData) {
       await fetchAllData();
     }
 
@@ -87,7 +96,7 @@ class AppProvider extends ChangeNotifier {
 
     _refreshTimer = Timer.periodic(
       Duration(minutes: _settings.refreshIntervalMinutes),
-      (_) => fetchAllData(),
+      (_) => fetchDailyData(), // Solo dati giornalieri, non storico
     );
   }
 
@@ -110,7 +119,53 @@ class AppProvider extends ChangeNotifier {
     );
   }
 
+  /// Fetch completo: prima storico (30gg), poi giornalieri
   Future<void> fetchAllData() async {
+    if (_settings.apiKey.isEmpty) {
+      _lastError = 'API Key non configurata';
+      notifyListeners();
+      return;
+    }
+
+    // Se non abbiamo dati storici, li carichiamo prima
+    if (_historicalData == null || !_historicalData!.hasData) {
+      await fetchHistoricalData();
+    }
+
+    // Poi carichiamo i dati giornalieri
+    await fetchDailyData();
+  }
+
+  /// Fetch dati storici (30 giorni) per calcolo soglie
+  Future<void> fetchHistoricalData() async {
+    if (_settings.apiKey.isEmpty) return;
+
+    _isLoadingHistorical = true;
+    notifyListeners();
+
+    final service = EntsoeService(securityToken: _settings.apiKey);
+    final now = DateTime.now();
+    final startDate = now.subtract(const Duration(days: 30));
+    final endDate = now.subtract(const Duration(days: 1)); // Fino a ieri
+
+    try {
+      _historicalData = await service.getHistoricalPrices(
+        _settings.domain,
+        startDate,
+        endDate,
+      );
+    } catch (e) {
+      _historicalData = HistoricalPriceData(
+        error: 'Errore caricamento storico: $e',
+      );
+    }
+
+    _isLoadingHistorical = false;
+    notifyListeners();
+  }
+
+  /// Fetch solo dati giornalieri (ieri, oggi, domani)
+  Future<void> fetchDailyData() async {
     if (_settings.apiKey.isEmpty) {
       _lastError = 'API Key non configurata';
       notifyListeners();
@@ -139,8 +194,11 @@ class AppProvider extends ChangeNotifier {
         EntsoeService.formatDateForApi(yesterday),
       );
       if (!yesterdayResponse.hasError) {
-        _yesterdayData =
-            PriceCalculator.processEntsoeResponse(yesterdayResponse, yesterday);
+        _yesterdayData = PriceCalculator.processEntsoeResponseWithHistory(
+          yesterdayResponse,
+          yesterday,
+          _historicalData,
+        );
       }
     } catch (e) {
       hasAnyError = true;
@@ -154,7 +212,11 @@ class AppProvider extends ChangeNotifier {
         EntsoeService.formatDateForApi(now),
       );
       if (!todayResponse.hasError) {
-        _todayData = PriceCalculator.processEntsoeResponse(todayResponse, now);
+        _todayData = PriceCalculator.processEntsoeResponseWithHistory(
+          todayResponse,
+          now,
+          _historicalData,
+        );
       } else {
         hasAnyError = true;
         errorMessage = todayResponse.error;
@@ -171,8 +233,11 @@ class AppProvider extends ChangeNotifier {
         EntsoeService.formatDateForApi(tomorrow),
       );
       if (!tomorrowResponse.hasError) {
-        _tomorrowData =
-            PriceCalculator.processEntsoeResponse(tomorrowResponse, tomorrow);
+        _tomorrowData = PriceCalculator.processEntsoeResponseWithHistory(
+          tomorrowResponse,
+          tomorrow,
+          _historicalData,
+        );
       }
       // Non segnaliamo errore per domani, potrebbe non essere ancora disponibile
     } catch (_) {

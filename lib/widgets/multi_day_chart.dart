@@ -1,19 +1,20 @@
 import 'dart:math' show min, max;
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:intl/intl.dart';
 import '../models/price_data.dart';
 
 class MultiDayChart extends StatefulWidget {
   final DayPriceData? yesterday;
   final DayPriceData? today;
   final DayPriceData? tomorrow;
+  final double? historicalAvgPrice;
 
   const MultiDayChart({
     super.key,
     this.yesterday,
     this.today,
     this.tomorrow,
+    this.historicalAvgPrice,
   });
 
   @override
@@ -24,6 +25,7 @@ class _MultiDayChartState extends State<MultiDayChart> {
   bool _showYesterday = true;
   bool _showToday = true;
   bool _showTomorrow = true;
+  bool _showAvgLine = true;
 
   @override
   Widget build(BuildContext context) {
@@ -94,6 +96,13 @@ class _MultiDayChartState extends State<MultiDayChart> {
                     Colors.green,
                     _showTomorrow,
                     (v) => setState(() => _showTomorrow = v),
+                  ),
+                if (widget.historicalAvgPrice != null)
+                  _buildFilterChip(
+                    'Media 30gg',
+                    Colors.purple,
+                    _showAvgLine,
+                    (v) => setState(() => _showAvgLine = v),
                   ),
               ],
             ),
@@ -210,6 +219,25 @@ class _MultiDayChartState extends State<MultiDayChart> {
                               fontSize: 10,
                             ),
                             labelResolver: (_) => 'Ora',
+                          ),
+                        ),
+                    ],
+                    horizontalLines: [
+                      if (_showAvgLine && widget.historicalAvgPrice != null)
+                        HorizontalLine(
+                          y: widget.historicalAvgPrice!,
+                          color: Colors.purple,
+                          strokeWidth: 2,
+                          dashArray: [8, 4],
+                          label: HorizontalLineLabel(
+                            show: true,
+                            alignment: Alignment.topRight,
+                            style: const TextStyle(
+                              color: Colors.purple,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                            ),
+                            labelResolver: (_) => 'Media ${widget.historicalAvgPrice!.toStringAsFixed(1)}',
                           ),
                         ),
                     ],
