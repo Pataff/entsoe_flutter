@@ -1,148 +1,148 @@
 # ENTSO-E Energy Price Monitor
 
-Applicazione Flutter per il monitoraggio e l'ottimizzazione dei costi energetici basata sui prezzi Day-Ahead della piattaforma ENTSO-E (European Network of Transmission System Operators for Electricity).
+A Flutter application for monitoring and optimizing energy costs based on Day-Ahead prices from the ENTSO-E (European Network of Transmission System Operators for Electricity) platform.
 
-## Descrizione
+## Description
 
-L'applicazione recupera i prezzi dell'energia elettrica dalla Transparency Platform di ENTSO-E e calcola automaticamente le fasce di potenza ottimali per la gestione dei carichi energetici. I dati vengono poi inviati via TCP a sistemi di controllo esterni (es. dView) per l'ottimizzazione dinamica dei consumi.
+The application retrieves electricity prices from the ENTSO-E Transparency Platform and automatically calculates optimal power bands for energy load management. Data is then sent via TCP to external control systems (e.g., dView) for dynamic consumption optimization.
 
-## Funzionalità
+## Features
 
-### Monitoraggio Prezzi
-- Recupero automatico dei prezzi Day-Ahead dall'API ENTSO-E
-- **Riferimento storico 30 giorni**: Card con Min/Media/Max e percentuale di maturità dati
-- Visualizzazione prezzi per **ieri**, **oggi** e **domani** (quando disponibili)
-- Grafico multi-giorno con andamento dei prezzi e **linea media mensile** (selezionabile)
-- Tabelle dettagliate con prezzi orari e fasce di potenza
+### Price Monitoring
+- Automatic retrieval of Day-Ahead prices from ENTSO-E API
+- **30-day historical reference**: Card showing Min/Average/Max and data maturity percentage
+- Price display for **yesterday**, **today**, and **tomorrow** (when available)
+- Multi-day chart with price trends and **monthly average line** (selectable)
+- Detailed tables with hourly prices and power bands
 
-### Algoritmo di Ottimizzazione
-L'applicazione implementa un algoritmo di classificazione basato su **riferimento storico (30 giorni)**:
+### Optimization Algorithm
+The application implements a classification algorithm based on **historical reference (30 days)**:
 
-1. **Acquisizione Dati Storici**
-   Al primo avvio, l'app recupera 30 giorni di dati storici dall'API ENTSO-E per calcolare:
-   - `Cmin_storico`: Prezzo minimo degli ultimi 30 giorni
-   - `Cmax_storico`: Prezzo massimo degli ultimi 30 giorni
-   - `Cmedia_storico`: Prezzo medio degli ultimi 30 giorni
+1. **Historical Data Acquisition**
+   On first launch, the app retrieves 30 days of historical data from the ENTSO-E API to calculate:
+   - `C_min_historical`: Minimum price over the last 30 days
+   - `C_max_historical`: Maximum price over the last 30 days
+   - `C_avg_historical`: Average price over the last 30 days
 
-2. **Calcolo Percentuale di Scostamento**
+2. **Deviation Percentage Calculation**
    ```
-   %i = ((Ci - Cmin_storico) / (Cmax_storico - Cmin_storico)) × 100
+   %i = ((Ci - C_min_historical) / (C_max_historical - C_min_historical)) × 100
    ```
-   Dove `Ci` è il prezzo dell'ora i, riferito al range storico mensile.
+   Where `Ci` is the price at hour i, referenced to the monthly historical range.
 
-3. **Classificazione in Fasce di Potenza**
-   La classificazione considera sia la percentuale che la media storica:
+3. **Power Band Classification**
+   Classification considers both the percentage and the historical average:
 
-   | Condizione | Fascia | Potenza |
-   |------------|--------|---------|
-   | `%i >= 66%` | 1 (Alto costo) | 20% |
-   | `Ci > Cmedia_storico` | 2 (Sopra media) | 50% |
-   | `%i < 33%` E `Ci <= Cmedia_storico` | 3 (Basso costo) | 100% |
-   | `%i >= 33%` E `Ci <= Cmedia_storico` | 2 (Medio costo) | 50% |
+   | Condition | Band | Power |
+   |-----------|------|-------|
+   | `%i >= 66%` | 1 (High cost) | 20% |
+   | `Ci > C_avg_historical` | 2 (Above average) | 50% |
+   | `%i < 33%` AND `Ci <= C_avg_historical` | 3 (Low cost) | 100% |
+   | `%i >= 33%` AND `Ci <= C_avg_historical` | 2 (Medium cost) | 50% |
 
-   **Regola chiave**: Se il prezzo corrente supera la media mensile, la potenza massima è limitata al 50%, indipendentemente dalla posizione nel range min/max.
+   **Key rule**: If the current price exceeds the monthly average, maximum power is capped at 50%, regardless of position in the min/max range.
 
-### Comunicazione TCP
-- Invio automatico comandi al server dView (protocollo MES interface)
-- Formato comando: `{"impr":"all","heat":XX,"fan":XX}\n` (NDJSON)
-- Intervallo di invio configurabile (30-600 secondi)
-- Monitoraggio stato connessione in tempo reale
+### TCP Communication
+- Automatic command sending to dView server (MES interface protocol)
+- Command format: `{"impr":"all","heat":XX,"fan":XX}\n` (NDJSON)
+- Configurable send interval (30-600 seconds)
+- Real-time connection status monitoring
 
-### Altre Funzionalità
-- Auto-refresh configurabile (1-60 minuti)
-- Supporto tema chiaro/scuro (segue impostazioni di sistema)
-- Layout responsive (mobile e desktop)
-- Persistenza impostazioni locali
+### Additional Features
+- Configurable auto-refresh (1-60 minutes)
+- Light/dark theme support (follows system settings)
+- Responsive layout (mobile and desktop)
+- Local settings persistence
 
-## Prerequisiti
+## Prerequisites
 
 - Flutter SDK ^3.7.0
 - Dart SDK ^3.7.0
-- Security Token ENTSO-E (gratuito, richiede registrazione)
+- ENTSO-E Security Token (free, registration required)
 
-### Ottenere il Security Token ENTSO-E
+### Obtaining the ENTSO-E Security Token
 
-1. Registrarsi su [ENTSO-E Transparency Platform](https://transparency.entsoe.eu/)
-2. Accedere al proprio profilo
-3. Generare un Security Token nella sezione API
+1. Register on [ENTSO-E Transparency Platform](https://transparency.entsoe.eu/)
+2. Access your profile
+3. Generate a Security Token in the API section
 
-## Installazione
+## Installation
 
 ```bash
-# Clona la repository
-git clone https://github.com/[username]/entsoe_flutter.git
+# Clone the repository
+git clone https://github.com/Pataff/entsoe_flutter.git
 cd entsoe_flutter
 
-# Installa le dipendenze
+# Install dependencies
 flutter pub get
 
-# Esegui l'applicazione
+# Run the application
 flutter run
 ```
 
-## Configurazione
+## Configuration
 
-Al primo avvio, accedere alle **Impostazioni** per configurare:
+On first launch, access **Settings** to configure:
 
-| Parametro | Descrizione | Default |
+| Parameter | Description | Default |
 |-----------|-------------|---------|
-| Security Token | Token API ENTSO-E | - |
-| Dominio | Codice area di mercato (es. `10IT-GRTN-----B` per Italia) | IT |
-| Intervallo Refresh | Minuti tra ogni aggiornamento dati | 15 |
-| IP Server TCP | Indirizzo server dView | - |
-| Porta TCP | Porta server dView | 5000 |
-| Invio TCP Auto | Abilita invio automatico comandi | Off |
-| Intervallo TCP | Secondi tra ogni invio TCP | 60 |
+| Security Token | ENTSO-E API token | - |
+| Domain | Market area code (e.g., `10IT-GRTN-----B` for Italy) | IT |
+| Refresh Interval | Minutes between data updates | 15 |
+| TCP Server IP | dView server address | - |
+| TCP Port | dView server port | 5000 |
+| TCP Auto Send | Enable automatic command sending | Off |
+| TCP Interval | Seconds between TCP sends | 60 |
 
-### Codici Dominio ENTSO-E
+### ENTSO-E Domain Codes
 
-| Paese | Codice |
-|-------|--------|
-| Italia | `10IT-GRTN-----B` |
-| Germania | `10Y1001A1001A83F` |
-| Francia | `10YFR-RTE------C` |
-| Spagna | `10YES-REE------0` |
+| Country | Code |
+|---------|------|
+| Italy | `10IT-GRTN-----B` |
+| Germany | `10Y1001A1001A83F` |
+| France | `10YFR-RTE------C` |
+| Spain | `10YES-REE------0` |
 | Austria | `10YAT-APG------L` |
 
-## Architettura
+## Architecture
 
 ```
 lib/
-├── main.dart                 # Entry point e configurazione tema
+├── main.dart                 # Entry point and theme configuration
 ├── models/
-│   ├── app_settings.dart     # Modello impostazioni
-│   ├── connection_status.dart # Stato connessioni
-│   └── price_data.dart       # Modelli dati prezzi
+│   ├── app_settings.dart     # Settings model
+│   ├── connection_status.dart # Connection states
+│   └── price_data.dart       # Price data models
 ├── providers/
 │   └── app_provider.dart     # State management (Provider)
 ├── screens/
-│   ├── dashboard_screen.dart # Schermata principale
-│   └── settings_screen.dart  # Schermata impostazioni
+│   ├── dashboard_screen.dart # Main screen
+│   └── settings_screen.dart  # Settings screen
 ├── services/
-│   ├── entsoe_service.dart   # Client API ENTSO-E
-│   ├── price_calculator.dart # Algoritmo ottimizzazione
-│   ├── storage_service.dart  # Persistenza locale
-│   └── tcp_service.dart      # Client TCP per dView
+│   ├── entsoe_service.dart   # ENTSO-E API client
+│   ├── price_calculator.dart # Optimization algorithm
+│   ├── storage_service.dart  # Local persistence
+│   └── tcp_service.dart      # TCP client for dView
 └── widgets/
-    ├── compact_price_table.dart    # Tabella prezzi compatta
-    ├── connection_status_widget.dart # Indicatore connessioni
-    ├── current_hour_card.dart      # Card ora corrente
-    ├── multi_day_chart.dart        # Grafico multi-giorno
-    └── price_chart.dart            # Grafico prezzi singolo
+    ├── compact_price_table.dart    # Compact price table
+    ├── connection_status_widget.dart # Connection indicator
+    ├── current_hour_card.dart      # Current hour card
+    ├── multi_day_chart.dart        # Multi-day chart
+    └── price_chart.dart            # Single price chart
 ```
 
-## Dipendenze
+## Dependencies
 
-| Package | Versione | Utilizzo |
-|---------|----------|----------|
-| http | ^1.2.0 | Chiamate HTTP API ENTSO-E |
-| xml | ^6.5.0 | Parsing risposte XML |
+| Package | Version | Usage |
+|---------|---------|-------|
+| http | ^1.2.0 | HTTP calls to ENTSO-E API |
+| xml | ^6.5.0 | XML response parsing |
 | provider | ^6.1.1 | State management |
-| shared_preferences | ^2.2.2 | Storage locale |
-| fl_chart | ^0.68.0 | Grafici |
-| intl | ^0.19.0 | Formattazione date (locale italiano) |
+| shared_preferences | ^2.2.2 | Local storage |
+| fl_chart | ^0.68.0 | Charts |
+| intl | ^0.19.0 | Date formatting |
 
-## Piattaforme Supportate
+## Supported Platforms
 
 - Windows
 - macOS
@@ -151,32 +151,32 @@ lib/
 - iOS
 - Web
 
-## Protocollo MES Interface
+## MES Interface Protocol
 
-L'applicazione comunica con il server dView utilizzando il protocollo MES interface:
+The application communicates with the dView server using the MES interface protocol:
 
-### Comando Impr (Energy Reduction)
+### Impr Command (Energy Reduction)
 ```json
 {"impr":"all","heat":XX,"fan":XX}
 ```
-- `impr`: Identificatore comando ("all" per tutti i dispositivi)
-- `heat`: Percentuale potenza riscaldamento (20, 50, 100)
-- `fan`: Percentuale potenza ventilazione (20, 50, 100)
+- `impr`: Command identifier ("all" for all devices)
+- `heat`: Heating power percentage (20, 50, 100)
+- `fan`: Ventilation power percentage (20, 50, 100)
 
-Ogni messaggio è in formato **NDJSON** (Newline Delimited JSON), terminato con `\n`.
+Each message is in **NDJSON** (Newline Delimited JSON) format, terminated with `\n`.
 
 ## Screenshot
 
-L'applicazione presenta una dashboard con:
-- Card informativa dell'ora corrente con prezzo e fascia di potenza
-- Grafico andamento prezzi su 3 giorni
-- Tabelle dettagliate per ieri, oggi e domani
-- Indicatori stato connessione ENTSO-E e TCP
+The application features a dashboard with:
+- Current hour info card with price and power band
+- 3-day price trend chart
+- Detailed tables for yesterday, today, and tomorrow
+- ENTSO-E and TCP connection status indicators
 
-## Licenza
+## License
 
 MIT License
 
-## Autore
+## Author
 
-Progetto sviluppato per l'ottimizzazione dinamica dei costi energetici basata sui prezzi del mercato Day-Ahead.
+Project developed for dynamic energy cost optimization based on Day-Ahead market prices.
