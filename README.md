@@ -6,6 +6,8 @@ A Flutter application for monitoring and optimizing energy costs based on Day-Ah
 
 **[Try the Web App](https://pataff.github.io/entsoe_flutter/)**
 
+> **Note:** The web version uses a CORS proxy to access the ENTSO-E API. Initial data loading (especially historical data) may take several minutes. Please be patient during the first load.
+
 ## Description
 
 The application retrieves electricity prices from the ENTSO-E Transparency Platform and automatically calculates optimal power setpoints using a **quantile-based non-linear algorithm**. Data is then sent via TCP to external control systems (e.g., dView) for dynamic consumption optimization.
