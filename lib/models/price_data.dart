@@ -1,41 +1,41 @@
 class HourlyPrice {
   final DateTime dateTime;
   final double price;
-  final double percentage;
-  final int powerBand; // 1 = Alto (20%), 2 = Medio (50%), 3 = Basso (100%)
+  final double percentage; // Normalized position in the quantile range (0-100%)
+  final int _powerPercentage; // Calculated setpoint percentage (continuous value)
 
   HourlyPrice({
     required this.dateTime,
     required this.price,
     required this.percentage,
-    required this.powerBand,
-  });
+    required int powerPercentage,
+  }) : _powerPercentage = powerPercentage;
+
+  /// Power band derived from setpoint percentage
+  /// Band 3 (green): >= 80% power (low cost)
+  /// Band 2 (orange): 40-79% power (medium cost)
+  /// Band 1 (red): < 40% power (high cost)
+  int get powerBand {
+    if (_powerPercentage >= 80) return 3;
+    if (_powerPercentage >= 40) return 2;
+    return 1;
+  }
 
   String get powerBandLabel {
     switch (powerBand) {
       case 3:
-        return 'Basso (100%)';
+        return 'Low cost ($_powerPercentage%)';
       case 2:
-        return 'Medio (50%)';
+        return 'Medium cost ($_powerPercentage%)';
       case 1:
-        return 'Alto (20%)';
+        return 'High cost ($_powerPercentage%)';
       default:
         return 'N/A';
     }
   }
 
-  int get powerPercentage {
-    switch (powerBand) {
-      case 3:
-        return 100;
-      case 2:
-        return 50;
-      case 1:
-        return 20;
-      default:
-        return 0;
-    }
-  }
+  /// The actual calculated power setpoint percentage (continuous value 0-100)
+  int get powerPercentage => _powerPercentage;
 
   Map<String, dynamic> toJson() => {
         'dateTime': dateTime.toIso8601String(),

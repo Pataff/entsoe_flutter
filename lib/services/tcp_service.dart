@@ -19,7 +19,7 @@ class TcpService {
       return TcpResult.success();
     } catch (e) {
       _isConnected = false;
-      return TcpResult.error('Errore connessione TCP: $e');
+      return TcpResult.error('TCP connection error: $e');
     }
   }
 
@@ -33,9 +33,9 @@ class TcpService {
     _isConnected = false;
   }
 
-  /// Invia il comando Impr (Energy reduction) al server dView
-  /// Formato: {"impr":"all","heat":XX,"fan":XX}\n
-  /// dove XX è la percentuale di potenza (heat e fan hanno lo stesso valore)
+  /// Send Impr command (Energy reduction) to dView server
+  /// Format: {"impr":"all","heat":XX,"fan":XX}\n
+  /// where XX is the power percentage (heat and fan have the same value)
   Future<TcpResult> sendImprCommand(
     String host,
     int port,
@@ -45,7 +45,7 @@ class TcpService {
       final socket = await Socket.connect(host, port,
           timeout: const Duration(seconds: 10));
 
-      // Comando Impr secondo protocollo MES interface
+      // Impr command according to MES interface protocol
       final command = {
         'impr': 'all',
         'heat': powerPercentage,
@@ -53,11 +53,11 @@ class TcpService {
       };
 
       final jsonString = jsonEncode(command);
-      // NDJSON: ogni messaggio deve terminare con \n
+      // NDJSON: each message must end with \n
       socket.write('$jsonString\n');
       await socket.flush();
 
-      // Attendi risposta dal server
+      // Wait for server response
       String response = '';
       try {
         socket.timeout(const Duration(seconds: 5));
@@ -66,7 +66,7 @@ class TcpService {
           if (response.contains('\n')) break;
         }
       } catch (_) {
-        // Timeout o errore lettura - non critico
+        // Timeout or read error - not critical
       }
 
       _lastResponse = response.isNotEmpty ? response.trim() : null;
@@ -74,25 +74,25 @@ class TcpService {
 
       return TcpResult.success(response: _lastResponse);
     } catch (e) {
-      return TcpResult.error('Errore invio comando Impr: $e');
+      return TcpResult.error('Error sending Impr command: $e');
     }
   }
 
-  /// Invia il comando Impr basato sui dati dell'ora corrente
+  /// Send Impr command based on current hour data
   Future<TcpResult> sendCurrentHourImpr(
     String host,
     int port,
     DayPriceData? todayData,
   ) async {
     if (todayData == null) {
-      return TcpResult.error('Nessun dato disponibile per oggi');
+      return TcpResult.error('No data available for today');
     }
 
     final now = DateTime.now();
     final currentHour = now.hour;
 
     if (currentHour >= todayData.hourlyPrices.length) {
-      return TcpResult.error('Dati ora corrente non disponibili');
+      return TcpResult.error('Current hour data not available');
     }
 
     final currentPrice = todayData.hourlyPrices[currentHour];
@@ -101,7 +101,7 @@ class TcpService {
     return sendImprCommand(host, port, powerPercentage);
   }
 
-  /// Invia tutti i dati dei prezzi (metodo legacy)
+  /// Send all price data (legacy method)
   Future<TcpResult> sendPriceData(
     String host,
     int port,
@@ -118,7 +118,7 @@ class TcpService {
 
       return TcpResult.success();
     } catch (e) {
-      return TcpResult.error('Errore invio dati TCP: $e');
+      return TcpResult.error('TCP data send error: $e');
     }
   }
 
@@ -151,7 +151,7 @@ class TcpService {
 
       return TcpResult.success();
     } catch (e) {
-      return TcpResult.error('Errore invio dati TCP: $e');
+      return TcpResult.error('TCP data send error: $e');
     }
   }
 

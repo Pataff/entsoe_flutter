@@ -36,7 +36,7 @@ class _MultiDayChartState extends State<MultiDayChart> {
     final hasTomorrow = widget.tomorrow != null;
 
     if (!hasYesterday && !hasToday && !hasTomorrow) {
-      return const Center(child: Text('Nessun dato disponibile'));
+      return const Center(child: Text('No data available'));
     }
 
     // Calculate min/max across all visible data from actual hourly prices
@@ -86,28 +86,28 @@ class _MultiDayChartState extends State<MultiDayChart> {
               children: [
                 if (hasYesterday)
                   _buildFilterChip(
-                    'Ieri',
+                    'Yesterday',
                     Colors.orange,
                     _showYesterday,
                     (v) => setState(() => _showYesterday = v),
                   ),
                 if (hasToday)
                   _buildFilterChip(
-                    'Oggi',
+                    'Today',
                     Colors.blue,
                     _showToday,
                     (v) => setState(() => _showToday = v),
                   ),
                 if (hasTomorrow)
                   _buildFilterChip(
-                    'Domani',
+                    'Tomorrow',
                     Colors.green,
                     _showTomorrow,
                     (v) => setState(() => _showTomorrow = v),
                   ),
                 if (widget.historicalAvgPrice != null)
                   _buildFilterChip(
-                    'Media ${widget.historicalPeriodLabel ?? ''}',
+                    'Avg ${widget.historicalPeriodLabel ?? ''}',
                     Colors.purple,
                     _showAvgLine,
                     (v) => setState(() => _showAvgLine = v),
@@ -126,20 +126,28 @@ class _MultiDayChartState extends State<MultiDayChart> {
                   gridData: FlGridData(
                     show: true,
                     drawVerticalLine: true,
-                    horizontalInterval: ((maxPrice - minPrice) / 5).clamp(5, 20),
+                    horizontalInterval: ((maxPrice - minPrice) / 5).clamp(
+                      5,
+                      20,
+                    ),
                     verticalInterval: 3,
-                    getDrawingHorizontalLine: (value) => FlLine(
-                      color: Colors.grey.withValues(alpha: 0.3),
-                      strokeWidth: 1,
-                    ),
-                    getDrawingVerticalLine: (value) => FlLine(
-                      color: Colors.grey.withValues(alpha: 0.2),
-                      strokeWidth: 1,
-                    ),
+                    getDrawingHorizontalLine:
+                        (value) => FlLine(
+                          color: Colors.grey.withValues(alpha: 0.3),
+                          strokeWidth: 1,
+                        ),
+                    getDrawingVerticalLine:
+                        (value) => FlLine(
+                          color: Colors.grey.withValues(alpha: 0.2),
+                          strokeWidth: 1,
+                        ),
                   ),
                   titlesData: FlTitlesData(
                     bottomTitles: AxisTitles(
-                      axisNameWidget: const Text('Ora', style: TextStyle(fontSize: 10)),
+                      axisNameWidget: const Text(
+                        'Ora',
+                        style: TextStyle(fontSize: 10),
+                      ),
                       sideTitles: SideTitles(
                         showTitles: true,
                         interval: 3,
@@ -156,7 +164,10 @@ class _MultiDayChartState extends State<MultiDayChart> {
                       ),
                     ),
                     leftTitles: AxisTitles(
-                      axisNameWidget: const Text('EUR/MWh', style: TextStyle(fontSize: 10)),
+                      axisNameWidget: const Text(
+                        'EUR/MWh',
+                        style: TextStyle(fontSize: 10),
+                      ),
                       sideTitles: SideTitles(
                         showTitles: true,
                         reservedSize: 45,
@@ -168,12 +179,18 @@ class _MultiDayChartState extends State<MultiDayChart> {
                         },
                       ),
                     ),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
                   ),
                   borderData: FlBorderData(
                     show: true,
-                    border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: Colors.grey.withValues(alpha: 0.3),
+                    ),
                   ),
                   lineTouchData: LineTouchData(
                     touchTooltipData: LineTouchTooltipData(
@@ -184,16 +201,20 @@ class _MultiDayChartState extends State<MultiDayChart> {
                           Color color;
                           DayPriceData? data;
 
-                          if (spot.barIndex == 0 && _showYesterday && hasYesterday) {
-                            dayLabel = 'Ieri';
+                          if (spot.barIndex == 0 &&
+                              _showYesterday &&
+                              hasYesterday) {
+                            dayLabel = 'Yesterday';
                             color = Colors.orange;
                             data = widget.yesterday;
-                          } else if (spot.barIndex == 1 && _showToday && hasToday) {
-                            dayLabel = 'Oggi';
+                          } else if (spot.barIndex == 1 &&
+                              _showToday &&
+                              hasToday) {
+                            dayLabel = 'Today';
                             color = Colors.blue;
                             data = widget.today;
                           } else {
-                            dayLabel = 'Domani';
+                            dayLabel = 'Tomorrow';
                             color = Colors.green;
                             data = widget.tomorrow;
                           }
@@ -202,7 +223,7 @@ class _MultiDayChartState extends State<MultiDayChart> {
                           final price = data?.hourlyPrices[hour];
 
                           return LineTooltipItem(
-                            '$dayLabel ${hour}:00\n${spot.y.toStringAsFixed(2)} EUR/MWh'
+                            '$dayLabel $hour:00\n${spot.y.toStringAsFixed(2)} EUR/MWh'
                             '${price != null ? '\n${price.percentage.toStringAsFixed(1)}%' : ''}',
                             TextStyle(color: color, fontSize: 11),
                           );
@@ -226,7 +247,7 @@ class _MultiDayChartState extends State<MultiDayChart> {
                               fontWeight: FontWeight.bold,
                               fontSize: 10,
                             ),
-                            labelResolver: (_) => 'Ora',
+                            labelResolver: (_) => 'Now',
                           ),
                         ),
                     ],
@@ -245,12 +266,18 @@ class _MultiDayChartState extends State<MultiDayChart> {
                               fontWeight: FontWeight.bold,
                               fontSize: 10,
                             ),
-                            labelResolver: (_) => 'Media ${widget.historicalAvgPrice!.toStringAsFixed(1)}',
+                            labelResolver:
+                                (_) =>
+                                    'Avg ${widget.historicalAvgPrice!.toStringAsFixed(1)}',
                           ),
                         ),
                     ],
                   ),
-                  lineBarsData: _buildLineBars(hasYesterday, hasToday, hasTomorrow),
+                  lineBarsData: _buildLineBars(
+                    hasYesterday,
+                    hasToday,
+                    hasTomorrow,
+                  ),
                 ),
               ),
             ),
@@ -260,7 +287,11 @@ class _MultiDayChartState extends State<MultiDayChart> {
     );
   }
 
-  List<LineChartBarData> _buildLineBars(bool hasYesterday, bool hasToday, bool hasTomorrow) {
+  List<LineChartBarData> _buildLineBars(
+    bool hasYesterday,
+    bool hasToday,
+    bool hasTomorrow,
+  ) {
     List<LineChartBarData> bars = [];
 
     // Yesterday - Orange
@@ -281,11 +312,16 @@ class _MultiDayChartState extends State<MultiDayChart> {
     return bars;
   }
 
-  LineChartBarData _createLineBar(DayPriceData data, Color color, List<int>? dashArray) {
+  LineChartBarData _createLineBar(
+    DayPriceData data,
+    Color color,
+    List<int>? dashArray,
+  ) {
     return LineChartBarData(
-      spots: data.hourlyPrices.map((p) {
-        return FlSpot(p.dateTime.hour.toDouble(), p.price);
-      }).toList(),
+      spots:
+          data.hourlyPrices.map((p) {
+            return FlSpot(p.dateTime.hour.toDouble(), p.price);
+          }).toList(),
       isCurved: true,
       curveSmoothness: 0.2,
       color: color,
@@ -307,7 +343,12 @@ class _MultiDayChartState extends State<MultiDayChart> {
     );
   }
 
-  Widget _buildFilterChip(String label, Color color, bool selected, Function(bool) onChanged) {
+  Widget _buildFilterChip(
+    String label,
+    Color color,
+    bool selected,
+    Function(bool) onChanged,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: FilterChip(

@@ -8,6 +8,7 @@ import '../widgets/compact_price_table.dart';
 import '../widgets/connection_status_widget.dart';
 import '../widgets/current_hour_card.dart';
 import 'settings_screen.dart';
+import 'historical_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -19,6 +20,16 @@ class DashboardScreen extends StatelessWidget {
         title: const Text('ENTSO-E Monitor'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.show_chart),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const HistoricalScreen()),
+              );
+            },
+            tooltip: 'Analisi Storica',
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
@@ -51,11 +62,14 @@ class DashboardScreen extends StatelessWidget {
                 children: [
                   const CircularProgressIndicator(),
                   const SizedBox(height: 16),
-                  Text('Caricamento dati storici (${provider.settings.historicalPeriod.label})...'),
+                  Text('Loading historical data (${provider.settings.historicalPeriod.label})...'),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Necessario per calcolo soglie accurate',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  Text(
+                    'Required for accurate threshold calculation',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -69,7 +83,7 @@ class DashboardScreen extends StatelessWidget {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('Caricamento dati ENTSO-E...'),
+                  Text('Loading ENTSO-E data...'),
                 ],
               ),
             );
@@ -96,7 +110,7 @@ class DashboardScreen extends StatelessWidget {
                 // Multi-day Chart
                 if (provider.hasData) ...[
                   const Text(
-                    'Andamento Prezzi (3 Giorni)',
+                    'Price Trend (3 Days)',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -118,7 +132,7 @@ class DashboardScreen extends StatelessWidget {
 
                 // Three Tables Side by Side
                 const Text(
-                  'Dettaglio Orario',
+                  'Hourly Detail',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -136,7 +150,7 @@ class DashboardScreen extends StatelessWidget {
                           Expanded(
                             child: _buildDayTable(
                               provider.yesterdayData,
-                              'Ieri',
+                              'Yesterday',
                               context,
                             ),
                           ),
@@ -144,7 +158,7 @@ class DashboardScreen extends StatelessWidget {
                           Expanded(
                             child: _buildDayTable(
                               provider.todayData,
-                              'Oggi',
+                              'Today',
                               context,
                               isToday: true,
                             ),
@@ -153,7 +167,7 @@ class DashboardScreen extends StatelessWidget {
                           Expanded(
                             child: _buildDayTable(
                               provider.tomorrowData,
-                              'Domani',
+                              'Tomorrow',
                               context,
                             ),
                           ),
@@ -165,20 +179,20 @@ class DashboardScreen extends StatelessWidget {
                         children: [
                           _buildDayTable(
                             provider.todayData,
-                            'Oggi',
+                            'Today',
                             context,
                             isToday: true,
                           ),
                           const SizedBox(height: 16),
                           _buildDayTable(
                             provider.yesterdayData,
-                            'Ieri',
+                            'Yesterday',
                             context,
                           ),
                           const SizedBox(height: 16),
                           _buildDayTable(
                             provider.tomorrowData,
-                            'Domani',
+                            'Tomorrow',
                             context,
                           ),
                         ],
@@ -195,6 +209,7 @@ class DashboardScreen extends StatelessWidget {
   }
 
   Widget _buildSetupPrompt(BuildContext context) {
+    final theme = Theme.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -204,11 +219,11 @@ class DashboardScreen extends StatelessWidget {
             Icon(
               Icons.settings_outlined,
               size: 80,
-              color: Colors.grey[400],
+              color: theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 24),
             const Text(
-              'Configura l\'applicazione',
+              'Configure the Application',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -216,12 +231,12 @@ class DashboardScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Per iniziare, configura il tuo ENTSO-E Security Token '
-              'e le altre impostazioni.',
+              'To get started, configure your ENTSO-E Security Token '
+              'and other settings.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16,
-                color: Colors.grey[600],
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 32),
@@ -233,7 +248,7 @@ class DashboardScreen extends StatelessWidget {
                 );
               },
               icon: const Icon(Icons.settings),
-              label: const Text('Vai alle Impostazioni'),
+              label: const Text('Go to Settings'),
               style: ElevatedButton.styleFrom(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
@@ -247,6 +262,7 @@ class DashboardScreen extends StatelessWidget {
 
   Widget _buildDayTable(DayPriceData? data, String label, BuildContext context, {bool isToday = false}) {
     final dateFormat = DateFormat('EEE d/M', 'it_IT');
+    final theme = Theme.of(context);
 
     return Card(
       elevation: 2,
@@ -259,7 +275,7 @@ class DashboardScreen extends StatelessWidget {
             decoration: BoxDecoration(
               color: isToday
                   ? Colors.blue.withValues(alpha: 0.15)
-                  : Theme.of(context).colorScheme.surfaceContainerHighest,
+                  : theme.colorScheme.surfaceContainerHighest,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
@@ -275,7 +291,7 @@ class DashboardScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: isToday ? Colors.blue : null,
+                    color: isToday ? Colors.blue[400] : theme.colorScheme.onSurface,
                   ),
                 ),
                 if (data != null)
@@ -283,7 +299,7 @@ class DashboardScreen extends StatelessWidget {
                     dateFormat.format(data.date),
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey[600],
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
               ],
@@ -297,11 +313,15 @@ class DashboardScreen extends StatelessWidget {
               padding: const EdgeInsets.all(32),
               child: Column(
                 children: [
-                  Icon(Icons.hourglass_empty, size: 32, color: Colors.grey[400]),
+                  Icon(
+                    Icons.hourglass_empty,
+                    size: 32,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                   const SizedBox(height: 8),
                   Text(
-                    'Non disponibile',
-                    style: TextStyle(color: Colors.grey[600]),
+                    'Not available',
+                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ],
               ),
@@ -313,79 +333,98 @@ class DashboardScreen extends StatelessWidget {
 
   Widget _buildHistoricalReferenceCard(BuildContext context, AppProvider provider) {
     final historical = provider.historicalData!;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.blue, width: 1.5),
-          color: Colors.blue.withValues(alpha: 0.08),
-        ),
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.history, size: 18, color: Colors.blue[800]),
-                const SizedBox(width: 8),
-                Text(
-                  'Riferimento Storico (${provider.settings.historicalPeriod.label})',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: Colors.blue[800],
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.blue,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${historical.dataMaturityPercent}%',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const HistoricalScreen()),
+          );
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.blue, width: 1.5),
+            color: Colors.blue.withValues(alpha: 0.1),
+          ),
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.history, size: 18, color: isDark ? Colors.blue[300] : Colors.blue[700]),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Historical Reference (${provider.settings.historicalPeriod.label})',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: isDark ? Colors.blue[300] : Colors.blue[700],
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildHistoricalStat('Min', historical.minPrice, Colors.green[800]!),
-                _buildHistoricalStat('Media', historical.avgPrice, Colors.blue[800]!),
-                _buildHistoricalStat('Max', historical.maxPrice, Colors.red[800]!),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: Text(
-                'Soglie: <33% = 100% pot. | 33-66% = 50% pot. | >66% = 20% pot.',
-                style: TextStyle(fontSize: 10, color: Colors.grey[700]),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.blue,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${historical.dataMaturityPercent}%',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(Icons.arrow_forward_ios, size: 14, color: isDark ? Colors.blue[300] : Colors.blue[700]),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildHistoricalStat(context, 'Min', historical.minPrice, Colors.green),
+                  _buildHistoricalStat(context, 'Avg', historical.avgPrice, Colors.blue),
+                  _buildHistoricalStat(context, 'Max', historical.maxPrice, Colors.red),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  'Thresholds: <33% = 100% pwr | 33-66% = 50% pwr | >66% = 20% pwr',
+                  style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildHistoricalStat(String label, double value, Color color) {
+  Widget _buildHistoricalStat(BuildContext context, String label, double value, MaterialColor baseColor) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    // Use lighter shade for dark mode, darker shade for light mode
+    final color = isDark ? baseColor[300]! : baseColor[700]!;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: baseColor.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: baseColor.withValues(alpha: 0.4)),
       ),
       child: Column(
         children: [
@@ -408,7 +447,7 @@ class DashboardScreen extends StatelessWidget {
           ),
           Text(
             'EUR/MWh',
-            style: TextStyle(fontSize: 9, color: Colors.grey[600]),
+            style: TextStyle(fontSize: 9, color: theme.colorScheme.onSurfaceVariant),
           ),
         ],
       ),

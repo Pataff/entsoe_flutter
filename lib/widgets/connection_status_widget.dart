@@ -20,10 +20,15 @@ class ConnectionStatusWidget extends StatelessWidget {
           return const SizedBox.shrink();
         }
 
+        final theme = Theme.of(context);
+        final isDark = theme.brightness == Brightness.dark;
+
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          color: hasErrors ? Colors.red.shade50 : Colors.blue.shade50,
+          color: hasErrors
+              ? (isDark ? Colors.red.withValues(alpha: 0.2) : Colors.red.shade50)
+              : (isDark ? Colors.blue.withValues(alpha: 0.2) : Colors.blue.shade50),
           child: Row(
             children: [
               // ENTSO-E Status
@@ -57,7 +62,7 @@ class ConnectionStatusWidget extends StatelessWidget {
                             '(${_formatTime(status.lastEntsoeSync!)})',
                             style: TextStyle(
                               fontSize: 10,
-                              color: Colors.grey[600],
+                              color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -108,7 +113,7 @@ class ConnectionStatusWidget extends StatelessWidget {
                             '(${_formatTime(status.lastTcpSend!)})',
                             style: TextStyle(
                               fontSize: 10,
-                              color: Colors.grey[600],
+                              color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -154,13 +159,13 @@ class ConnectionStatusWidget extends StatelessWidget {
   String _getStatusText(cs.ConnectionState state) {
     switch (state) {
       case cs.ConnectionState.connected:
-        return 'Connesso';
+        return 'Connected';
       case cs.ConnectionState.connecting:
-        return 'Connessione...';
+        return 'Connecting...';
       case cs.ConnectionState.error:
-        return 'Errore';
+        return 'Error';
       case cs.ConnectionState.disconnected:
-        return 'Non connesso';
+        return 'Disconnected';
     }
   }
 

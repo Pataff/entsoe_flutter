@@ -12,7 +12,7 @@ class EntsoeService {
 
   Future<EntsoeResponse> getDayAheadPrices(String domain, String date) async {
     if (domain.isEmpty || securityToken.isEmpty) {
-      return EntsoeResponse(error: 'Domain o Security Token non configurati');
+      return EntsoeResponse(error: 'Domain or Security Token not configured');
     }
 
     final url = Uri.parse(
@@ -27,18 +27,18 @@ class EntsoeService {
     try {
       final response = await http.get(url).timeout(
             const Duration(seconds: 30),
-            onTimeout: () => throw Exception('Timeout connessione ENTSO-E'),
+            onTimeout: () => throw Exception('ENTSO-E connection timeout'),
           );
 
       if (response.statusCode != 200) {
         return EntsoeResponse(
-          error: 'Errore HTTP ${response.statusCode}: ${response.reasonPhrase}',
+          error: 'HTTP Error ${response.statusCode}: ${response.reasonPhrase}',
         );
       }
 
       return _parseXmlResponse(response.body);
     } catch (e) {
-      return EntsoeResponse(error: 'Errore di connessione: $e');
+      return EntsoeResponse(error: 'Connection error: $e');
     }
   }
 
@@ -51,7 +51,7 @@ class EntsoeService {
       if (root.name.local == 'Acknowledgement_MarketDocument') {
         final reasonText = root.findAllElements('text').firstOrNull?.innerText;
         return EntsoeResponse(
-          error: reasonText ?? 'Errore sconosciuto nella risposta ENTSO-E',
+          error: reasonText ?? 'Unknown error in ENTSO-E response',
         );
       }
 
@@ -109,12 +109,12 @@ class EntsoeService {
         prices: prices,
       );
     } catch (e) {
-      return EntsoeResponse(error: 'Errore parsing XML: $e');
+      return EntsoeResponse(error: 'XML parsing error: $e');
     }
   }
 
-  /// Ottiene i prezzi storici per un range di date (es. ultimi 30 giorni)
-  /// Restituisce tutti i prezzi nel periodo per calcolare min/max storici
+  /// Gets historical prices for a date range (e.g., last 30 days)
+  /// Returns all prices in the period for calculating historical min/max
   Future<HistoricalPriceData> getHistoricalPrices(
     String domain,
     DateTime startDate,
@@ -122,7 +122,7 @@ class EntsoeService {
   ) async {
     if (domain.isEmpty || securityToken.isEmpty) {
       return HistoricalPriceData(
-        error: 'Domain o Security Token non configurati',
+        error: 'Domain or Security Token not configured',
       );
     }
 
@@ -152,7 +152,7 @@ class EntsoeService {
 
     if (allPrices.isEmpty) {
       return HistoricalPriceData(
-        error: lastError ?? 'Nessun dato storico disponibile',
+        error: lastError ?? 'No historical data available',
       );
     }
 
@@ -224,15 +224,16 @@ class HistoricalPriceData {
 }
 
 /// Cache dei prezzi giornalieri per aggiornamento incrementale
+/// La cache memorizza sempre 1 anno di dati (365 giorni)
 class HistoricalPriceCache {
+  static const int cacheStorageDays = 365; // Sempre 1 anno in cache
+
   final String domain;
-  final int periodDays;
   final Map<String, List<double>> dailyPrices; // key: "YYYY-MM-DD", value: 24 prices
   final DateTime lastUpdate;
 
   HistoricalPriceCache({
     required this.domain,
-    required this.periodDays,
     required this.dailyPrices,
     required this.lastUpdate,
   });
@@ -240,7 +241,6 @@ class HistoricalPriceCache {
   /// Converte in JSON per storage
   Map<String, dynamic> toJson() => {
     'domain': domain,
-    'periodDays': periodDays,
     'dailyPrices': dailyPrices,
     'lastUpdate': lastUpdate.toIso8601String(),
   };
@@ -256,25 +256,44 @@ class HistoricalPriceCache {
 
     return HistoricalPriceCache(
       domain: json['domain'] as String,
-      periodDays: json['periodDays'] as int,
       dailyPrices: dailyPrices,
       lastUpdate: DateTime.parse(json['lastUpdate'] as String),
     );
   }
 
   /// Calcola le statistiche aggregate dai dati cached
-  HistoricalPriceData toHistoricalData() {
+  /// [periodDays] specifica quanti giorni usare per il calcolo (default: tutti)
+  HistoricalPriceData toHistoricalData({int? periodDays}) {
     if (dailyPrices.isEmpty) {
-      return HistoricalPriceData(error: 'Nessun dato in cache');
+      return HistoricalPriceData(error: 'No data in cache');
+    }
+
+    // Filtra i giorni in base al periodo richiesto
+    Map<String, List<double>> filteredPrices;
+    if (periodDays != null) {
+      final cutoffDate = DateTime.now().subtract(Duration(days: periodDays));
+      filteredPrices = <String, List<double>>{};
+      dailyPrices.forEach((dateKey, prices) {
+        final date = DateTime.parse(dateKey);
+        if (date.isAfter(cutoffDate) || date.isAtSameMomentAs(cutoffDate)) {
+          filteredPrices[dateKey] = prices;
+        }
+      });
+    } else {
+      filteredPrices = dailyPrices;
+    }
+
+    if (filteredPrices.isEmpty) {
+      return HistoricalPriceData(error: 'No data in selected period');
     }
 
     final allPrices = <double>[];
-    for (final prices in dailyPrices.values) {
+    for (final prices in filteredPrices.values) {
       allPrices.addAll(prices);
     }
 
     if (allPrices.isEmpty) {
-      return HistoricalPriceData(error: 'Nessun prezzo in cache');
+      return HistoricalPriceData(error: 'No prices in cache');
     }
 
     allPrices.sort();
@@ -288,8 +307,8 @@ class HistoricalPriceCache {
         .reduce((a, b) => a + b) / allPrices.length;
     final stdDeviation = variance > 0 ? sqrt(variance) : 0.0;
 
-    // Trova date dal cache
-    final dates = dailyPrices.keys.toList()..sort();
+    // Trova date dal cache filtrato
+    final dates = filteredPrices.keys.toList()..sort();
     final startDate = dates.isNotEmpty ? DateTime.parse(dates.first) : null;
     final endDate = dates.isNotEmpty ? DateTime.parse(dates.last) : null;
 
@@ -299,15 +318,16 @@ class HistoricalPriceCache {
       avgPrice: avgPrice,
       stdDeviation: stdDeviation,
       totalPrices: allPrices.length,
-      daysWithData: dailyPrices.length,
+      daysWithData: filteredPrices.length,
       startDate: startDate,
       endDate: endDate,
     );
   }
 
-  /// Verifica se il cache è valido per il dominio e periodo correnti
-  bool isValidFor(String currentDomain, int currentPeriodDays) {
-    return domain == currentDomain && periodDays == currentPeriodDays;
+  /// Verifica se il cache è valido per il dominio corrente
+  /// La cache è sempre di 1 anno, quindi non dipende dal periodo selezionato
+  bool isValidForDomain(String currentDomain) {
+    return domain == currentDomain;
   }
 
   /// Verifica se il cache è aggiornato (ultimo update è oggi)
@@ -318,11 +338,11 @@ class HistoricalPriceCache {
            lastUpdate.day == today.day;
   }
 
-  /// Ottiene i giorni mancanti da aggiungere
-  List<DateTime> getMissingDays(int targetPeriodDays) {
+  /// Ottiene i giorni mancanti da aggiungere (sempre basato su 1 anno)
+  List<DateTime> getMissingDays() {
     final today = DateTime.now();
     final yesterday = today.subtract(const Duration(days: 1));
-    final targetStart = today.subtract(Duration(days: targetPeriodDays));
+    final targetStart = today.subtract(const Duration(days: cacheStorageDays));
 
     final missingDays = <DateTime>[];
     var current = targetStart;
@@ -338,10 +358,10 @@ class HistoricalPriceCache {
     return missingDays;
   }
 
-  /// Rimuove i giorni troppo vecchi rispetto al periodo target
-  HistoricalPriceCache pruneOldDays(int targetPeriodDays) {
+  /// Rimuove i giorni troppo vecchi (oltre 1 anno)
+  HistoricalPriceCache pruneOldDays() {
     final today = DateTime.now();
-    final cutoffDate = today.subtract(Duration(days: targetPeriodDays));
+    final cutoffDate = today.subtract(const Duration(days: cacheStorageDays));
 
     final prunedPrices = <String, List<double>>{};
     dailyPrices.forEach((dateKey, prices) {
@@ -353,7 +373,6 @@ class HistoricalPriceCache {
 
     return HistoricalPriceCache(
       domain: domain,
-      periodDays: targetPeriodDays,
       dailyPrices: prunedPrices,
       lastUpdate: lastUpdate,
     );
@@ -366,7 +385,6 @@ class HistoricalPriceCache {
 
     return HistoricalPriceCache(
       domain: domain,
-      periodDays: periodDays,
       dailyPrices: newPrices,
       lastUpdate: DateTime.now(),
     );
@@ -375,4 +393,155 @@ class HistoricalPriceCache {
   static String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
+
+  /// Gets a specific percentile value from historical data
+  /// [percentile] is a value between 0.0 and 1.0 (e.g., 0.2 for 20th percentile)
+  /// [periodDays] filters to specific period (optional)
+  double? getPercentile(double percentile, {int? periodDays}) {
+    if (dailyPrices.isEmpty || percentile < 0 || percentile > 1) return null;
+
+    // Filter by period if specified
+    Map<String, List<double>> filteredPrices;
+    if (periodDays != null) {
+      final cutoffDate = DateTime.now().subtract(Duration(days: periodDays));
+      filteredPrices = <String, List<double>>{};
+      dailyPrices.forEach((dateKey, prices) {
+        final date = DateTime.parse(dateKey);
+        if (date.isAfter(cutoffDate) || date.isAtSameMomentAs(cutoffDate)) {
+          filteredPrices[dateKey] = prices;
+        }
+      });
+    } else {
+      filteredPrices = dailyPrices;
+    }
+
+    if (filteredPrices.isEmpty) return null;
+
+    // Collect all prices and sort them
+    final allPrices = <double>[];
+    for (final prices in filteredPrices.values) {
+      allPrices.addAll(prices);
+    }
+
+    if (allPrices.isEmpty) return null;
+
+    allPrices.sort();
+
+    // Calculate percentile index using linear interpolation
+    final index = percentile * (allPrices.length - 1);
+    final lowerIndex = index.floor();
+    final upperIndex = index.ceil();
+
+    if (lowerIndex == upperIndex) {
+      return allPrices[lowerIndex];
+    }
+
+    // Linear interpolation between adjacent values
+    final fraction = index - lowerIndex;
+    return allPrices[lowerIndex] * (1 - fraction) + allPrices[upperIndex] * fraction;
+  }
+
+  /// Gets both low and high percentile thresholds at once
+  /// Returns (p_low, p_high) for the quantile algorithm
+  (double, double)? getPercentileThresholds(double lowPercentile, double highPercentile, {int? periodDays}) {
+    final pLow = getPercentile(lowPercentile, periodDays: periodDays);
+    final pHigh = getPercentile(highPercentile, periodDays: periodDays);
+
+    if (pLow == null || pHigh == null) return null;
+    return (pLow, pHigh);
+  }
+
+  /// Gets daily statistics for the historical chart
+  /// Returns a list of [DailyPriceStats] sorted by date
+  List<DailyPriceStats> getDailyStats({int? periodDays}) {
+    if (dailyPrices.isEmpty) return [];
+
+    // Filtra per periodo se specificato
+    Map<String, List<double>> filteredPrices;
+    if (periodDays != null) {
+      final cutoffDate = DateTime.now().subtract(Duration(days: periodDays));
+      filteredPrices = <String, List<double>>{};
+      dailyPrices.forEach((dateKey, prices) {
+        final date = DateTime.parse(dateKey);
+        if (date.isAfter(cutoffDate) || date.isAtSameMomentAs(cutoffDate)) {
+          filteredPrices[dateKey] = prices;
+        }
+      });
+    } else {
+      filteredPrices = dailyPrices;
+    }
+
+    final stats = <DailyPriceStats>[];
+
+    filteredPrices.forEach((dateKey, prices) {
+      if (prices.isEmpty) return;
+
+      final sortedPrices = List<double>.from(prices)..sort();
+      final minPrice = sortedPrices.first;
+      final maxPrice = sortedPrices.last;
+      final avgPrice = prices.reduce((a, b) => a + b) / prices.length;
+
+      stats.add(DailyPriceStats(
+        date: DateTime.parse(dateKey),
+        minPrice: minPrice,
+        maxPrice: maxPrice,
+        avgPrice: avgPrice,
+      ));
+    });
+
+    // Ordina per data
+    stats.sort((a, b) => a.date.compareTo(b.date));
+
+    return stats;
+  }
+
+  /// Calcola le statistiche globali per il periodo
+  GlobalPriceStats? getGlobalStats({int? periodDays}) {
+    final dailyStats = getDailyStats(periodDays: periodDays);
+    if (dailyStats.isEmpty) return null;
+
+    double globalMin = double.infinity;
+    double globalMax = double.negativeInfinity;
+    double totalAvg = 0;
+
+    for (final day in dailyStats) {
+      if (day.minPrice < globalMin) globalMin = day.minPrice;
+      if (day.maxPrice > globalMax) globalMax = day.maxPrice;
+      totalAvg += day.avgPrice;
+    }
+
+    return GlobalPriceStats(
+      minPrice: globalMin,
+      maxPrice: globalMax,
+      avgPrice: totalAvg / dailyStats.length,
+    );
+  }
+}
+
+/// Statistiche giornaliere per il grafico
+class DailyPriceStats {
+  final DateTime date;
+  final double minPrice;
+  final double maxPrice;
+  final double avgPrice;
+
+  DailyPriceStats({
+    required this.date,
+    required this.minPrice,
+    required this.maxPrice,
+    required this.avgPrice,
+  });
+}
+
+/// Statistiche globali del periodo
+class GlobalPriceStats {
+  final double minPrice;
+  final double maxPrice;
+  final double avgPrice;
+
+  GlobalPriceStats({
+    required this.minPrice,
+    required this.maxPrice,
+    required this.avgPrice,
+  });
 }

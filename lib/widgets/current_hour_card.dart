@@ -22,7 +22,8 @@ class CurrentHourCard extends StatelessWidget {
         // Calculate price difference vs yesterday
         double? priceDiff;
         double? priceDiffPercent;
-        if (yesterdayData != null && currentHour < yesterdayData.hourlyPrices.length) {
+        if (yesterdayData != null &&
+            currentHour < yesterdayData.hourlyPrices.length) {
           final yesterdayPrice = yesterdayData.hourlyPrices[currentHour].price;
           priceDiff = currentPrice.price - yesterdayPrice;
           priceDiffPercent = (priceDiff / yesterdayPrice) * 100;
@@ -53,8 +54,12 @@ class CurrentHourCard extends StatelessWidget {
                                 child: CircularProgressIndicator(
                                   value: currentPrice.powerPercentage / 100,
                                   strokeWidth: 8,
-                                  backgroundColor: Colors.grey.withValues(alpha: 0.2),
-                                  valueColor: AlwaysStoppedAnimation<Color>(bandColor),
+                                  backgroundColor: Colors.grey.withValues(
+                                    alpha: 0.2,
+                                  ),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    bandColor,
+                                  ),
                                 ),
                               ),
                               Column(
@@ -69,10 +74,10 @@ class CurrentHourCard extends StatelessWidget {
                                     ),
                                   ),
                                   Text(
-                                    'Potenza',
+                                    'Power',
                                     style: TextStyle(
                                       fontSize: 9,
-                                      color: Colors.grey[600],
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                                     ),
                                   ),
                                 ],
@@ -81,13 +86,16 @@ class CurrentHourCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 6),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: bandColor,
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              'FASCIA ${currentPrice.powerBand}',
+                              'BAND ${currentPrice.powerBand}',
                               style: const TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
@@ -119,11 +127,15 @@ class CurrentHourCard extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.center,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.access_time, size: 12, color: bandColor),
+                              Icon(
+                                Icons.access_time,
+                                size: 12,
+                                color: bandColor,
+                              ),
                               const SizedBox(width: 4),
                               Flexible(
                                 child: Text(
-                                  'Fascia Oraria',
+                                  'Time Slot',
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: bandColor,
@@ -155,8 +167,8 @@ class CurrentHourCard extends StatelessWidget {
                     flex: 2,
                     child: _buildInfoCell(
                       context,
-                      'Prezzo Attuale',
-                      '${currentPrice.price.toStringAsFixed(2)}',
+                      'Current Price',
+                      currentPrice.price.toStringAsFixed(2),
                       'EUR/MWh',
                       Icons.euro,
                       Colors.blue,
@@ -170,9 +182,9 @@ class CurrentHourCard extends StatelessWidget {
                     flex: 2,
                     child: _buildInfoCell(
                       context,
-                      'Scostamento',
+                      'Deviation',
                       '${currentPrice.percentage.toStringAsFixed(1)}%',
-                      'dal minimo',
+                      'from min',
                       Icons.trending_up,
                       Colors.purple,
                     ),
@@ -183,16 +195,21 @@ class CurrentHourCard extends StatelessWidget {
                   // Fifth cell: Difference vs yesterday
                   Expanded(
                     flex: 2,
-                    child: priceDiff != null
-                        ? _buildDiffCell(context, priceDiff, priceDiffPercent!)
-                        : _buildInfoCell(
-                            context,
-                            'vs Ieri',
-                            'N/D',
-                            '',
-                            Icons.compare_arrows,
-                            Colors.grey,
-                          ),
+                    child:
+                        priceDiff != null
+                            ? _buildDiffCell(
+                              context,
+                              priceDiff,
+                              priceDiffPercent!,
+                            )
+                            : _buildInfoCell(
+                              context,
+                              'vs Yesterday',
+                              'N/A',
+                              '',
+                              Icons.compare_arrows,
+                              Colors.grey,
+                            ),
                   ),
                 ],
               ),
@@ -269,12 +286,17 @@ class CurrentHourCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isPositive = diff > 0;
     final isNegative = diff < 0;
-    final color = isPositive ? Colors.red : (isNegative ? Colors.green : Colors.grey);
+    final color =
+        isPositive ? Colors.red : (isNegative ? Colors.green : Colors.grey);
     // Use darker shade for better contrast
-    final textColor = isPositive
-        ? Colors.red[800]!
-        : (isNegative ? Colors.green[800]! : Colors.grey[700]!);
-    final icon = isPositive ? Icons.arrow_upward : (isNegative ? Icons.arrow_downward : Icons.remove);
+    final textColor =
+        isPositive
+            ? Colors.red[800]!
+            : (isNegative ? Colors.green[800]! : Colors.grey[700]!);
+    final icon =
+        isPositive
+            ? Icons.arrow_upward
+            : (isNegative ? Icons.arrow_downward : Icons.remove);
 
     return Container(
       padding: const EdgeInsets.all(10),
@@ -290,10 +312,14 @@ class CurrentHourCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.compare_arrows, size: 12, color: isDark ? color : textColor),
+              Icon(
+                Icons.compare_arrows,
+                size: 12,
+                color: isDark ? color : textColor,
+              ),
               const SizedBox(width: 4),
               Text(
-                'vs Ieri',
+                'vs Yesterday',
                 style: TextStyle(
                   fontSize: 10,
                   color: isDark ? color : textColor,
@@ -309,7 +335,7 @@ class CurrentHourCard extends StatelessWidget {
             children: [
               Icon(icon, size: 16, color: isDark ? color : textColor),
               Text(
-                '${diff.abs().toStringAsFixed(2)}',
+                diff.abs().toStringAsFixed(2),
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,

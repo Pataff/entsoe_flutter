@@ -27,12 +27,16 @@ class CompactPriceTable extends StatelessWidget {
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(
-              color: isCurrentHour
-                  ? Colors.blue.withValues(alpha: 0.2)
-                  : (index.isEven ? Colors.grey.withValues(alpha: 0.05) : null),
-              border: isCurrentHour
-                  ? Border.all(color: Colors.blue, width: 2)
-                  : null,
+              color:
+                  isCurrentHour
+                      ? Colors.blue.withValues(alpha: 0.2)
+                      : (index.isEven
+                          ? Colors.grey.withValues(alpha: 0.05)
+                          : null),
+              border:
+                  isCurrentHour
+                      ? Border.all(color: Colors.blue, width: 2)
+                      : null,
             ),
             child: Row(
               children: [
@@ -43,7 +47,8 @@ class CompactPriceTable extends StatelessWidget {
                     '${price.dateTime.hour.toString().padLeft(2, '0')}:00',
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight: isCurrentHour ? FontWeight.bold : FontWeight.w500,
+                      fontWeight:
+                          isCurrentHour ? FontWeight.bold : FontWeight.w500,
                     ),
                   ),
                 ),
@@ -51,10 +56,11 @@ class CompactPriceTable extends StatelessWidget {
                 Expanded(
                   flex: 2,
                   child: Text(
-                    '${price.price.toStringAsFixed(2)}',
+                    price.price.toStringAsFixed(2),
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight: isCurrentHour ? FontWeight.bold : FontWeight.normal,
+                      fontWeight:
+                          isCurrentHour ? FontWeight.bold : FontWeight.normal,
                     ),
                     textAlign: TextAlign.right,
                   ),
@@ -67,7 +73,7 @@ class CompactPriceTable extends StatelessWidget {
                     '${price.percentage.toStringAsFixed(0)}%',
                     style: TextStyle(
                       fontSize: 11,
-                      color: Colors.grey[600],
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                     textAlign: TextAlign.right,
                   ),
@@ -76,9 +82,14 @@ class CompactPriceTable extends StatelessWidget {
                 // Power band indicator
                 Container(
                   width: 36,
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
-                    color: _getColorForBand(price.powerBand).withValues(alpha: 0.2),
+                    color: _getColorForBand(
+                      price.powerBand,
+                    ).withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(
                       color: _getColorForBand(price.powerBand),

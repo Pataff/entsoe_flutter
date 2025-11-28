@@ -1,10 +1,13 @@
-/// Enum per il periodo storico di riferimento
+/// Enum for historical reference period
 enum HistoricalPeriod {
-  oneWeek(7, '1 settimana'),
-  twoWeeks(14, '2 settimane'),
-  oneMonth(30, '1 mese'),
-  sixMonths(180, '6 mesi'),
-  oneYear(365, '1 anno');
+  oneWeek(7, '1 week'),
+  twoWeeks(14, '2 weeks'),
+  threeWeeks(21, '3 weeks'),
+  oneMonth(30, '1 month'),
+  threeMonths(90, '3 months'),
+  sixMonths(180, '6 months'),
+  nineMonths(270, '9 months'),
+  oneYear(365, '1 year');
 
   final int days;
   final String label;
@@ -18,9 +21,16 @@ class AppSettings {
   final String domainName;
   final String tcpIpAddress;
   final int tcpPort;
-  final int tcpSendIntervalSeconds; // Intervallo invio TCP (30-600 secondi)
-  final bool tcpAutoSendEnabled; // Abilita invio automatico TCP
-  final HistoricalPeriod historicalPeriod; // Periodo per calcolo min/max storico
+  final int tcpSendIntervalSeconds; // TCP send interval (30-600 seconds)
+  final bool tcpAutoSendEnabled; // Enable automatic TCP send
+  final HistoricalPeriod historicalPeriod; // Period for historical min/max calculation
+
+  // Quantile-based algorithm parameters
+  final double lowPercentile; // Lower percentile threshold (0.0-1.0, default 0.2 = 20th)
+  final double highPercentile; // Upper percentile threshold (0.0-1.0, default 0.8 = 80th)
+  final double minReduction; // Minimum power reduction % (0-100, default 0)
+  final double maxReduction; // Maximum power reduction % (0-100, default 90)
+  final double nonLinearExponent; // Exponent for non-linear curve (>= 1.0, default 2.0)
 
   AppSettings({
     this.apiKey = '',
@@ -29,9 +39,15 @@ class AppSettings {
     this.domainName = 'IT-North BZ',
     this.tcpIpAddress = '192.168.1.100',
     this.tcpPort = 8080,
-    this.tcpSendIntervalSeconds = 60, // Default 60 secondi
+    this.tcpSendIntervalSeconds = 300, // Default 5 minutes for ramp control
     this.tcpAutoSendEnabled = true,
-    this.historicalPeriod = HistoricalPeriod.oneMonth, // Default 1 mese
+    this.historicalPeriod = HistoricalPeriod.oneMonth, // Default 1 month
+    // Quantile algorithm defaults
+    this.lowPercentile = 0.2, // 20th percentile
+    this.highPercentile = 0.8, // 80th percentile
+    this.minReduction = 0.0, // 0% minimum reduction
+    this.maxReduction = 90.0, // 90% maximum reduction
+    this.nonLinearExponent = 2.0, // Quadratic curve
   });
 
   AppSettings copyWith({
@@ -44,6 +60,11 @@ class AppSettings {
     int? tcpSendIntervalSeconds,
     bool? tcpAutoSendEnabled,
     HistoricalPeriod? historicalPeriod,
+    double? lowPercentile,
+    double? highPercentile,
+    double? minReduction,
+    double? maxReduction,
+    double? nonLinearExponent,
   }) {
     return AppSettings(
       apiKey: apiKey ?? this.apiKey,
@@ -57,6 +78,11 @@ class AppSettings {
           tcpSendIntervalSeconds ?? this.tcpSendIntervalSeconds,
       tcpAutoSendEnabled: tcpAutoSendEnabled ?? this.tcpAutoSendEnabled,
       historicalPeriod: historicalPeriod ?? this.historicalPeriod,
+      lowPercentile: lowPercentile ?? this.lowPercentile,
+      highPercentile: highPercentile ?? this.highPercentile,
+      minReduction: minReduction ?? this.minReduction,
+      maxReduction: maxReduction ?? this.maxReduction,
+      nonLinearExponent: nonLinearExponent ?? this.nonLinearExponent,
     );
   }
 
@@ -70,6 +96,11 @@ class AppSettings {
         'tcpSendIntervalSeconds': tcpSendIntervalSeconds,
         'tcpAutoSendEnabled': tcpAutoSendEnabled,
         'historicalPeriod': historicalPeriod.name,
+        'lowPercentile': lowPercentile,
+        'highPercentile': highPercentile,
+        'minReduction': minReduction,
+        'maxReduction': maxReduction,
+        'nonLinearExponent': nonLinearExponent,
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -89,9 +120,14 @@ class AppSettings {
       domainName: json['domainName'] ?? 'IT-North BZ',
       tcpIpAddress: json['tcpIpAddress'] ?? '192.168.1.100',
       tcpPort: json['tcpPort'] ?? 8080,
-      tcpSendIntervalSeconds: json['tcpSendIntervalSeconds'] ?? 60,
+      tcpSendIntervalSeconds: json['tcpSendIntervalSeconds'] ?? 300,
       tcpAutoSendEnabled: json['tcpAutoSendEnabled'] ?? true,
       historicalPeriod: period,
+      lowPercentile: (json['lowPercentile'] as num?)?.toDouble() ?? 0.2,
+      highPercentile: (json['highPercentile'] as num?)?.toDouble() ?? 0.8,
+      minReduction: (json['minReduction'] as num?)?.toDouble() ?? 0.0,
+      maxReduction: (json['maxReduction'] as num?)?.toDouble() ?? 90.0,
+      nonLinearExponent: (json['nonLinearExponent'] as num?)?.toDouble() ?? 2.0,
     );
   }
 }

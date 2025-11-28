@@ -18,6 +18,8 @@ class AppProvider extends ChangeNotifier {
   DayPriceData? _todayData;
   DayPriceData? _tomorrowData;
   HistoricalPriceData? _historicalData;
+  HistoricalPriceCache? _historicalCache; // Cache for percentile calculations
+  AlgorithmParams? _algorithmParams; // Current algorithm parameters
   bool _isLoading = false;
   bool _isLoadingHistorical = false;
   String? _lastError;
@@ -31,6 +33,8 @@ class AppProvider extends ChangeNotifier {
   DayPriceData? get todayData => _todayData;
   DayPriceData? get tomorrowData => _tomorrowData;
   HistoricalPriceData? get historicalData => _historicalData;
+  HistoricalPriceCache? get historicalCache => _historicalCache;
+  AlgorithmParams? get algorithmParams => _algorithmParams;
   bool get isLoading => _isLoading;
   bool get isLoadingHistorical => _isLoadingHistorical;
   String? get lastError => _lastError;
@@ -65,28 +69,41 @@ class AppProvider extends ChangeNotifier {
     final oldTcpInterval = _settings.tcpSendIntervalSeconds;
     final oldTcpAutoSend = _settings.tcpAutoSendEnabled;
     final oldHistoricalPeriod = _settings.historicalPeriod;
+    // Track algorithm parameter changes
+    final algorithmChanged =
+        newSettings.lowPercentile != _settings.lowPercentile ||
+        newSettings.highPercentile != _settings.highPercentile ||
+        newSettings.minReduction != _settings.minReduction ||
+        newSettings.maxReduction != _settings.maxReduction ||
+        newSettings.nonLinearExponent != _settings.nonLinearExponent;
 
     _settings = newSettings;
     await _storageService.saveSettings(newSettings);
     notifyListeners();
 
-    // Se l'API key, il dominio o il periodo storico sono cambiati, ricarica tutto incluso storico
-    if (newSettings.apiKey != oldApiKey ||
-        newSettings.domain != oldDomain ||
-        newSettings.historicalPeriod != oldHistoricalPeriod) {
-      _historicalData = null; // Reset storico
-      await _storageService.clearHistoricalCache(); // Pulisci cache
+    // If API key or domain changed, reload everything including historical data
+    // Period change does NOT invalidate cache (always uses 1 year of cache)
+    if (newSettings.apiKey != oldApiKey || newSettings.domain != oldDomain) {
+      _historicalData = null;
+      _historicalCache = null;
+      _algorithmParams = null;
+      await _storageService.clearHistoricalCache();
       await fetchAllData();
+    } else if (newSettings.historicalPeriod != oldHistoricalPeriod || algorithmChanged) {
+      // If period or algorithm params changed, recalculate from existing cache
+      await _recalculateHistoricalFromCache();
+      // Reload daily data to apply new parameters
+      await fetchDailyData();
     } else if (!hasData) {
       await fetchAllData();
     }
 
-    // Se l'intervallo e' cambiato, riavvia il timer
+    // Restart refresh timer if interval changed
     if (newSettings.refreshIntervalMinutes != oldInterval) {
       _startAutoRefresh();
     }
 
-    // Se l'intervallo TCP o l'abilitazione sono cambiati, riavvia il timer TCP
+    // Restart TCP timer if interval or enabled state changed
     if (newSettings.tcpSendIntervalSeconds != oldTcpInterval ||
         newSettings.tcpAutoSendEnabled != oldTcpAutoSend) {
       _startAutoTcpSend();
@@ -123,25 +140,25 @@ class AppProvider extends ChangeNotifier {
     );
   }
 
-  /// Fetch completo: prima storico (30gg), poi giornalieri
+  /// Full fetch: first historical data, then daily data
   Future<void> fetchAllData() async {
     if (_settings.apiKey.isEmpty) {
-      _lastError = 'API Key non configurata';
+      _lastError = 'API Key not configured';
       notifyListeners();
       return;
     }
 
-    // Se non abbiamo dati storici, li carichiamo prima
+    // If we don't have historical data, load it first
     if (_historicalData == null || !_historicalData!.hasData) {
       await fetchHistoricalData();
     }
 
-    // Poi carichiamo i dati giornalieri
+    // Then load daily data
     await fetchDailyData();
   }
 
-  /// Fetch dati storici per calcolo soglie (periodo configurabile)
-  /// Usa la cache per velocizzare: carica da storage e aggiorna solo i giorni mancanti
+  /// Fetch historical data for threshold calculation
+  /// Cache always stores 1 year of data, but uses only selected period for calculations
   Future<void> fetchHistoricalData() async {
     if (_settings.apiKey.isEmpty) return;
 
@@ -152,35 +169,41 @@ class AppProvider extends ChangeNotifier {
     final domain = _settings.domain;
 
     try {
-      // Prova a caricare dalla cache
+      // Try to load from cache
       var cache = await _storageService.loadHistoricalCache();
 
-      // Verifica se la cache è valida per il dominio e periodo correnti
-      if (cache != null && cache.isValidFor(domain, periodDays)) {
-        // Cache valida, verifica se è aggiornata
+      // Check if cache is valid for domain (period doesn't affect validity)
+      if (cache != null && cache.isValidForDomain(domain)) {
+        // Cache valid for domain, check if up to date
         if (cache.isUpToDate) {
-          // Cache aggiornata oggi, usa direttamente
-          _historicalData = cache.toHistoricalData();
+          // Cache updated today, use directly with period filter
+          _historicalCache = cache;
+          _historicalData = cache.toHistoricalData(periodDays: periodDays);
+          _algorithmParams = AlgorithmParams.fromSettings(_settings, cache);
           _isLoadingHistorical = false;
           notifyListeners();
           return;
         }
 
-        // Cache non aggiornata, aggiorna incrementalmente
-        cache = await _updateCacheIncrementally(cache, periodDays);
+        // Cache not updated, update incrementally (always 1 year)
+        cache = await _updateCacheIncrementally(cache);
       } else {
-        // Nessuna cache valida, scarica tutto
-        cache = await _fetchAllHistoricalData(periodDays);
+        // No valid cache, download all (1 year)
+        cache = await _fetchAllHistoricalData();
       }
 
-      // Salva la cache aggiornata
+      // Save updated cache
       if (cache != null) {
         await _storageService.saveHistoricalCache(cache);
-        _historicalData = cache.toHistoricalData();
+        _historicalCache = cache;
+        // Extract only data for selected period
+        _historicalData = cache.toHistoricalData(periodDays: periodDays);
+        // Create algorithm params from cache
+        _algorithmParams = AlgorithmParams.fromSettings(_settings, cache);
       }
     } catch (e) {
       _historicalData = HistoricalPriceData(
-        error: 'Errore caricamento storico: $e',
+        error: 'Error loading historical data: $e',
       );
     }
 
@@ -188,30 +211,53 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Aggiorna la cache incrementalmente: rimuove vecchi giorni, aggiunge nuovi
+  /// Recalculates historical data from existing cache with new period/algorithm params
+  Future<void> _recalculateHistoricalFromCache() async {
+    _isLoadingHistorical = true;
+    notifyListeners();
+
+    try {
+      var cache = _historicalCache;
+      cache ??= await _storageService.loadHistoricalCache();
+
+      if (cache != null && cache.isValidForDomain(_settings.domain)) {
+        _historicalCache = cache;
+        _historicalData = cache.toHistoricalData(
+          periodDays: _settings.historicalPeriod.days,
+        );
+        // Recalculate algorithm params with new settings
+        _algorithmParams = AlgorithmParams.fromSettings(_settings, cache);
+      }
+    } catch (e) {
+      // If fails, keep current historical data
+    }
+
+    _isLoadingHistorical = false;
+    notifyListeners();
+  }
+
+  /// Updates cache incrementally: removes days > 1 year, adds new ones
   Future<HistoricalPriceCache?> _updateCacheIncrementally(
     HistoricalPriceCache cache,
-    int periodDays,
   ) async {
     final service = EntsoeService(securityToken: _settings.apiKey);
 
-    // Rimuovi giorni troppo vecchi
-    cache = cache.pruneOldDays(periodDays);
+    // Remove days older than 1 year
+    cache = cache.pruneOldDays();
 
-    // Trova giorni mancanti
-    final missingDays = cache.getMissingDays(periodDays);
+    // Find missing days (always based on 1 year)
+    final missingDays = cache.getMissingDays();
 
     if (missingDays.isEmpty) {
-      // Nessun giorno mancante, aggiorna solo il timestamp
+      // No missing days, just update timestamp
       return HistoricalPriceCache(
         domain: cache.domain,
-        periodDays: cache.periodDays,
         dailyPrices: cache.dailyPrices,
         lastUpdate: DateTime.now(),
       );
     }
 
-    // Scarica solo i giorni mancanti
+    // Download only missing days
     for (final date in missingDays) {
       final response = await service.getDayAheadPrices(
         _settings.domain,
@@ -222,19 +268,22 @@ class AppProvider extends ChangeNotifier {
         cache = cache.addDayData(date, response.prices);
       }
 
-      // Piccola pausa per evitare rate limiting
+      // Small delay to avoid rate limiting
       await Future.delayed(const Duration(milliseconds: 50));
     }
 
     return cache;
   }
 
-  /// Scarica tutti i dati storici (nessuna cache o cache invalida)
-  Future<HistoricalPriceCache?> _fetchAllHistoricalData(int periodDays) async {
+  /// Downloads all historical data (always 1 year of cache)
+  Future<HistoricalPriceCache?> _fetchAllHistoricalData() async {
     final service = EntsoeService(securityToken: _settings.apiKey);
     final now = DateTime.now();
     final yesterday = now.subtract(const Duration(days: 1));
-    final startDate = now.subtract(Duration(days: periodDays));
+    // Always 1 year of cache
+    final startDate = now.subtract(
+      const Duration(days: HistoricalPriceCache.cacheStorageDays),
+    );
 
     final dailyPrices = <String, List<double>>{};
     var currentDate = startDate;
@@ -255,7 +304,7 @@ class AppProvider extends ChangeNotifier {
 
       currentDate = currentDate.add(const Duration(days: 1));
 
-      // Piccola pausa per evitare rate limiting
+      // Small delay to avoid rate limiting
       await Future.delayed(const Duration(milliseconds: 100));
     }
 
@@ -265,16 +314,15 @@ class AppProvider extends ChangeNotifier {
 
     return HistoricalPriceCache(
       domain: _settings.domain,
-      periodDays: periodDays,
       dailyPrices: dailyPrices,
       lastUpdate: DateTime.now(),
     );
   }
 
-  /// Fetch solo dati giornalieri (ieri, oggi, domani)
+  /// Fetch daily data only (yesterday, today, tomorrow)
   Future<void> fetchDailyData() async {
     if (_settings.apiKey.isEmpty) {
-      _lastError = 'API Key non configurata';
+      _lastError = 'API Key not configured';
       notifyListeners();
       return;
     }
@@ -294,6 +342,10 @@ class AppProvider extends ChangeNotifier {
     bool hasAnyError = false;
     String? errorMessage;
 
+    // Get or create algorithm params
+    final params = _algorithmParams ??
+        AlgorithmParams.fromSettings(_settings, _historicalCache);
+
     // Fetch yesterday
     try {
       final yesterdayResponse = await service.getDayAheadPrices(
@@ -301,15 +353,15 @@ class AppProvider extends ChangeNotifier {
         EntsoeService.formatDateForApi(yesterday),
       );
       if (!yesterdayResponse.hasError) {
-        _yesterdayData = PriceCalculator.processEntsoeResponseWithHistory(
+        _yesterdayData = PriceCalculator.processEntsoeResponseWithQuantiles(
           yesterdayResponse,
           yesterday,
-          _historicalData,
+          params,
         );
       }
     } catch (e) {
       hasAnyError = true;
-      errorMessage = 'Errore dati ieri: $e';
+      errorMessage = 'Error fetching yesterday data: $e';
     }
 
     // Fetch today
@@ -319,10 +371,10 @@ class AppProvider extends ChangeNotifier {
         EntsoeService.formatDateForApi(now),
       );
       if (!todayResponse.hasError) {
-        _todayData = PriceCalculator.processEntsoeResponseWithHistory(
+        _todayData = PriceCalculator.processEntsoeResponseWithQuantiles(
           todayResponse,
           now,
-          _historicalData,
+          params,
         );
       } else {
         hasAnyError = true;
@@ -330,7 +382,7 @@ class AppProvider extends ChangeNotifier {
       }
     } catch (e) {
       hasAnyError = true;
-      errorMessage = 'Errore dati oggi: $e';
+      errorMessage = 'Error fetching today data: $e';
     }
 
     // Fetch tomorrow
@@ -340,15 +392,15 @@ class AppProvider extends ChangeNotifier {
         EntsoeService.formatDateForApi(tomorrow),
       );
       if (!tomorrowResponse.hasError) {
-        _tomorrowData = PriceCalculator.processEntsoeResponseWithHistory(
+        _tomorrowData = PriceCalculator.processEntsoeResponseWithQuantiles(
           tomorrowResponse,
           tomorrow,
-          _historicalData,
+          params,
         );
       }
-      // Non segnaliamo errore per domani, potrebbe non essere ancora disponibile
+      // Don't report error for tomorrow, it might not be available yet
     } catch (_) {
-      // I dati di domani potrebbero non essere disponibili
+      // Tomorrow's data might not be available
     }
 
     _isLoading = false;
@@ -369,21 +421,21 @@ class AppProvider extends ChangeNotifier {
 
     notifyListeners();
 
-    // Avvia il timer TCP automatico se abilitato e non gia' attivo
+    // Start automatic TCP timer if enabled and not already active
     if (hasData && _settings.tcpAutoSendEnabled && _tcpSendTimer == null) {
-      // Invia subito la prima volta, poi il timer gestira' gli invii successivi
+      // Send immediately first time, then timer will handle subsequent sends
       await sendDataViaTcp();
       _startAutoTcpSend();
     }
   }
 
-  /// Invia il comando Impr al server dView con la percentuale di potenza corrente
-  /// Formato: {"impr":"all","heat":XX,"fan":XX}\n
+  /// Sends the Impr command to dView server with current power percentage
+  /// Format: {"impr":"all","heat":XX,"fan":XX}\n
   Future<void> sendDataViaTcp() async {
     if (_todayData == null) {
       _connectionStatus = _connectionStatus.copyWith(
         tcpStatus: ConnectionState.error,
-        tcpError: 'Nessun dato disponibile per oggi',
+        tcpError: 'No data available for today',
       );
       notifyListeners();
       return;

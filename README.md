@@ -2,62 +2,104 @@
 
 A Flutter application for monitoring and optimizing energy costs based on Day-Ahead prices from the ENTSO-E (European Network of Transmission System Operators for Electricity) platform.
 
+## Live Demo
+
+**[Try the Web App](https://pataff.github.io/entsoe_flutter/)**
+
 ## Description
 
-The application retrieves electricity prices from the ENTSO-E Transparency Platform and automatically calculates optimal power bands for energy load management. Data is then sent via TCP to external control systems (e.g., dView) for dynamic consumption optimization.
+The application retrieves electricity prices from the ENTSO-E Transparency Platform and automatically calculates optimal power setpoints using a **quantile-based non-linear algorithm**. Data is then sent via TCP to external control systems (e.g., dView) for dynamic consumption optimization.
 
 ## Features
 
 ### Price Monitoring
 - Automatic retrieval of Day-Ahead prices from ENTSO-E API
-- **Configurable historical reference**: 1 week, 2 weeks, 1 month, 6 months, or 1 year
+- **Configurable historical reference**: 1 month, 3 months, 6 months, or 1 year
 - Historical reference card showing Min/Average/Max and data maturity percentage
 - Price display for **yesterday**, **today**, and **tomorrow** (when available)
 - Multi-day chart with price trends and **historical average line** (selectable)
-- Detailed tables with hourly prices and power bands
+- **Historical Analysis screen** with monthly trend charts
+- Detailed tables with hourly prices and power setpoints
 
 ### Smart Caching System
-- **Local cache** for historical price data - fast app startup after first load
+- **Local cache** for historical price data (1 year) - fast app startup after first load
 - **Incremental updates**: Only fetches new days, removes old ones (FIFO)
 - Cache persists between app sessions
-- Automatic cache invalidation when domain or period changes
+- Automatic cache invalidation when domain changes
 
-### Optimization Algorithm
-The application implements a **Simple Normalized Deviation from Minimum** algorithm:
+### Quantile-Based Non-Linear Power Modulation Algorithm
 
-1. **Historical Data Acquisition**
-   The app retrieves historical data for the configured period (1 week to 1 year) to calculate:
-   - `C_avg_historical`: Average price over the selected period (used for power band decision)
+The application implements an advanced **quantile-based non-linear algorithm** for optimal power control:
 
-2. **Daily Deviation Percentage Calculation**
+#### Algorithm Parameters (Configurable in Settings)
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| Low Percentile | Defines "cheap" price threshold | 20% |
+| High Percentile | Defines "expensive" price threshold | 80% |
+| Min Reduction | Power reduction at low prices | 0% |
+| Max Reduction | Power reduction at high prices | 90% |
+| Non-linear Exponent | Curve aggressiveness (1=linear, 2=quadratic) | 2.0 |
+
+#### Calculation Steps
+
+1. **Calculate Percentile Thresholds**
+   Using historical data from the selected period:
+   - `P_low` = price at Low Percentile (e.g., 20th percentile)
+   - `P_high` = price at High Percentile (e.g., 80th percentile)
+
+2. **Normalize Current Price**
    ```
-   %i = ((Ci - C_min_day) / (C_max_day - C_min_day)) × 100
+   β = (Price - P_low) / (P_high - P_low)
+   β = clamp(β, 0, 1)
    ```
-   Where `Ci` is the price at hour i, `C_min_day` and `C_max_day` are the **daily** min/max values.
 
-   This shows how expensive an hour is **within the day** (0% = cheapest, 100% = most expensive).
+3. **Apply Non-Linear Transformation**
+   ```
+   β_nl = β^n    (where n = exponent)
+   ```
 
-3. **Power Band Classification**
-   Classification combines **daily percentage** with **historical average**:
+4. **Calculate Power Reduction**
+   ```
+   Reduction% = R_min + β_nl × (R_max - R_min)
+   ```
 
-   | Condition | Band | Power |
-   |-----------|------|-------|
-   | `%i >= 66%` | 1 (High cost) | 20% |
-   | `Ci > C_avg_historical` | 2 (Above average) | 50% |
-   | `%i < 33%` AND `Ci <= C_avg_historical` | 3 (Low cost) | 100% |
-   | `%i >= 33%` AND `Ci <= C_avg_historical` | 2 (Medium cost) | 50% |
+5. **Calculate Power Setpoint**
+   ```
+   Power% = 100% - Reduction%
+   ```
 
-   **Key rule**: If the current price exceeds the historical average, maximum power is capped at 50%, regardless of the daily percentage.
+#### Example
+With default settings (P_low=50, P_high=150 EUR/MWh, exponent=2.0, max reduction=90%):
+- Price = 100 EUR/MWh
+- β = (100-50)/(150-50) = 0.5
+- β_nl = 0.5² = 0.25
+- Reduction = 0.25 × 90% = 22.5%
+- **Power Setpoint = 77.5%**
+
+#### Power Bands (Visual Indicators)
+
+| Band | Power Range | Color | Meaning |
+|------|-------------|-------|---------|
+| 3 | ≥ 80% | Green | Low cost - high power |
+| 2 | 40-79% | Orange | Medium cost - reduced power |
+| 1 | < 40% | Red | High cost - minimum power |
+
+### Help System
+- Built-in **Help screen** with comprehensive algorithm documentation
+- Step-by-step explanation of calculations
+- Parameter descriptions with examples
+- Accessible from Settings (? icon)
 
 ### TCP Communication
 - Automatic command sending to dView server (MES interface protocol)
 - Command format: `{"impr":"all","heat":XX,"fan":XX}\n` (NDJSON)
-- Configurable send interval (30-600 seconds)
+- Configurable send interval (30-600 seconds, default **5 minutes** for smooth ramp control)
 - Real-time connection status monitoring
 
 ### Additional Features
-- Configurable auto-refresh (1-60 minutes)
-- Light/dark theme support (follows system settings)
+- Configurable auto-refresh (15 min - 6 hours)
+- **Light/dark theme support** with proper contrast
 - Responsive layout (mobile and desktop)
 - Local settings persistence
 
@@ -87,19 +129,43 @@ flutter pub get
 flutter run
 ```
 
+### Build for Web
+```bash
+flutter build web
+# Output in build/web/
+```
+
 ## Configuration
 
 On first launch, access **Settings** to configure:
 
+### Basic Settings
+
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | Security Token | ENTSO-E API token | - |
-| Domain | Market area code (e.g., `10IT-GRTN-----B` for Italy) | IT |
-| Refresh Interval | Minutes between data updates | 15 |
+| Domain | Market area code | IT |
+| Refresh Interval | Data update frequency | 15 min |
+| Historical Period | Period for threshold calculation | 3 months |
+
+### Power Algorithm Settings
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| Low Percentile | "Cheap" threshold (5-45%) | 20% |
+| High Percentile | "Expensive" threshold (55-95%) | 80% |
+| Min Reduction | Reduction at low prices (0-100%) | 0% |
+| Max Reduction | Reduction at high prices (0-100%) | 90% |
+| Non-linear Exponent | Curve shape (1.0-5.0) | 2.0 |
+
+### TCP Settings
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
 | TCP Server IP | dView server address | - |
 | TCP Port | dView server port | 5000 |
-| TCP Auto Send | Enable automatic command sending | Off |
-| TCP Interval | Seconds between TCP sends | 60 |
+| TCP Auto Send | Enable automatic sending | Off |
+| TCP Interval | Seconds between sends | 300 (5 min) |
 
 ### ENTSO-E Domain Codes
 
@@ -117,25 +183,28 @@ On first launch, access **Settings** to configure:
 lib/
 ├── main.dart                 # Entry point and theme configuration
 ├── models/
-│   ├── app_settings.dart     # Settings model
+│   ├── app_settings.dart     # Settings model with algorithm params
 │   ├── connection_status.dart # Connection states
 │   └── price_data.dart       # Price data models
 ├── providers/
 │   └── app_provider.dart     # State management (Provider)
 ├── screens/
-│   ├── dashboard_screen.dart # Main screen
-│   └── settings_screen.dart  # Settings screen
+│   ├── dashboard_screen.dart # Main dashboard
+│   ├── settings_screen.dart  # Settings with algorithm config
+│   ├── historical_screen.dart # Historical analysis
+│   └── help_screen.dart      # Algorithm documentation
 ├── services/
-│   ├── entsoe_service.dart   # ENTSO-E API client
-│   ├── price_calculator.dart # Optimization algorithm
+│   ├── entsoe_service.dart   # ENTSO-E API + cache + percentiles
+│   ├── price_calculator.dart # Quantile-based algorithm
 │   ├── storage_service.dart  # Local persistence
 │   └── tcp_service.dart      # TCP client for dView
 └── widgets/
-    ├── compact_price_table.dart    # Compact price table
+    ├── compact_price_table.dart      # Compact price table
     ├── connection_status_widget.dart # Connection indicator
-    ├── current_hour_card.dart      # Current hour card
-    ├── multi_day_chart.dart        # Multi-day chart
-    └── price_chart.dart            # Single price chart
+    ├── current_hour_card.dart        # Current hour info
+    ├── historical_trend_chart.dart   # Monthly trend chart
+    ├── multi_day_chart.dart          # Multi-day price chart
+    └── price_chart.dart              # Single day chart
 ```
 
 ## Dependencies
@@ -156,7 +225,7 @@ lib/
 - Linux
 - Android
 - iOS
-- Web
+- **Web** ([Live Demo](https://pataff.github.io/entsoe_flutter/))
 
 ## MES Interface Protocol
 
@@ -167,18 +236,20 @@ The application communicates with the dView server using the MES interface proto
 {"impr":"all","heat":XX,"fan":XX}
 ```
 - `impr`: Command identifier ("all" for all devices)
-- `heat`: Heating power percentage (20, 50, 100)
-- `fan`: Ventilation power percentage (20, 50, 100)
+- `heat`: Heating power percentage (continuous 0-100%)
+- `fan`: Ventilation power percentage (continuous 0-100%)
 
 Each message is in **NDJSON** (Newline Delimited JSON) format, terminated with `\n`.
 
-## Screenshot
+## Screenshots
 
-The application features a dashboard with:
-- Current hour info card with price and power band
-- 3-day price trend chart
-- Detailed tables for yesterday, today, and tomorrow
-- ENTSO-E and TCP connection status indicators
+The application features:
+- **Dashboard** with current hour info, power band indicator, and price charts
+- **3-day price trend** chart with optional historical average line
+- **Detailed tables** for yesterday, today, and tomorrow
+- **Historical Analysis** screen with monthly trends
+- **Settings** with full algorithm configuration
+- **Help** screen with comprehensive documentation
 
 ## License
 
