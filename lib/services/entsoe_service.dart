@@ -1,28 +1,39 @@
 import 'dart:math' show sqrt;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 import '../models/price_data.dart';
 
 class EntsoeService {
   static const String _baseUrl = 'https://web-api.tp.entsoe.eu/api';
+  // CORS proxy for web platform (ENTSO-E API doesn't support CORS)
+  static const String _corsProxy = 'https://corsproxy.io/?';
 
   final String securityToken;
 
   EntsoeService({required this.securityToken});
+
+  /// Returns the appropriate URL, with CORS proxy if on web
+  String _getUrl(String baseUrl) {
+    if (kIsWeb) {
+      return '$_corsProxy${Uri.encodeComponent(baseUrl)}';
+    }
+    return baseUrl;
+  }
 
   Future<EntsoeResponse> getDayAheadPrices(String domain, String date) async {
     if (domain.isEmpty || securityToken.isEmpty) {
       return EntsoeResponse(error: 'Domain or Security Token not configured');
     }
 
-    final url = Uri.parse(
-      '$_baseUrl?securityToken=$securityToken'
-      '&documentType=A44'
-      '&in_Domain=$domain'
-      '&out_Domain=$domain'
-      '&periodStart=${date}0000'
-      '&periodEnd=${date}2300',
-    );
+    final apiUrl = '$_baseUrl?securityToken=$securityToken'
+        '&documentType=A44'
+        '&in_Domain=$domain'
+        '&out_Domain=$domain'
+        '&periodStart=${date}0000'
+        '&periodEnd=${date}2300';
+
+    final url = Uri.parse(_getUrl(apiUrl));
 
     try {
       final response = await http.get(url).timeout(
